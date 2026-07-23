@@ -1,0 +1,1425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sainath Nasta House – The Real Taste of Bhavnagar</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────
+  // Go to https://console.firebase.google.com → your project →
+  // Project Settings → Your apps → Web app → firebaseConfig
+  const firebaseConfig = {
+    apiKey:            "YOUR_API_KEY",
+    authDomain:        "YOUR_PROJECT.firebaseapp.com",
+    databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId:         "YOUR_PROJECT_ID",
+    storageBucket:     "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId:             "YOUR_APP_ID"
+  };
+  // ─────────────────────────────────────────────────────────────────────
+
+  const ADMIN_PASSWORD = "sainath2025"; // change this!
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+  const specialsRef = ref(db, "todays_specials");
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function todayKey() {
+    return new Date().toISOString().slice(0, 10); // "2026-06-28"
+  }
+
+  function renderSpecials(items) {
+    const grid = document.getElementById("special-grid-dynamic");
+    grid.innerHTML = "";
+    if (!items || Object.keys(items).length === 0) {
+      grid.innerHTML = '<div class="special-empty">✨ Check back soon — today\'s special is being prepared!</div>';
+      return;
+    }
+    // Show only today's items
+    const today = todayKey();
+    const todayItems = Object.entries(items).filter(([,v]) => v.date === today);
+    if (todayItems.length === 0) {
+      grid.innerHTML = '<div class="special-empty">✨ Check back soon — today\'s special is being prepared!</div>';
+      return;
+    }
+    const ribbons = ["🔥 Hot Today", "🌿 Fresh", "🍲 Chef's Pick", "⭐ Must Try", "💛 Fan Fav"];
+    todayItems.forEach(([key, item], idx) => {
+      const card = document.createElement("div");
+      card.className = "special-item";
+      card.innerHTML = `
+        <span class="special-ribbon">${ribbons[idx % ribbons.length]}</span>
+        <span class="special-item-emoji">${item.emoji || "🍽️"}</span>
+        <div class="special-item-name">${item.name}<small>${item.description || ""}</small></div>
+        <div class="special-price"><sup>₹</sup>${item.price}</div>
+      `;
+      grid.appendChild(card);
+    });
+    // update grid columns
+    const count = todayItems.length;
+    grid.style.gridTemplateColumns = count === 1 ? "1fr" : count === 2 ? "repeat(2,1fr)" : "repeat(3,1fr)";
+  }
+
+  function renderAdminList(items) {
+    const list = document.getElementById("admin-items-list");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!items) return;
+    const today = todayKey();
+    const todayItems = Object.entries(items).filter(([,v]) => v.date === today);
+    if (todayItems.length === 0) {
+      list.innerHTML = '<p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No specials added for today yet.</p>';
+      return;
+    }
+    todayItems.forEach(([key, item]) => {
+      const row = document.createElement("div");
+      row.className = "admin-item-row";
+      row.innerHTML = `
+        <span class="admin-item-emoji">${item.emoji || "🍽️"}</span>
+        <div class="admin-item-info">
+          <div class="admin-item-name">${item.name}</div>
+          <div class="admin-item-sub">${item.description || ""}</div>
+        </div>
+        <div class="admin-item-price">₹${item.price}</div>
+        <button class="btn-del" data-key="${key}">Remove</button>
+      `;
+      list.appendChild(row);
+    });
+    // delete handlers
+    list.querySelectorAll(".btn-del").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const key = btn.dataset.key;
+        remove(ref(db, `todays_specials/${key}`));
+      });
+    });
+  }
+
+  // ── Live listener ─────────────────────────────────────────────────────
+  onValue(specialsRef, (snap) => {
+    const data = snap.val();
+    renderSpecials(data);
+    renderAdminList(data);
+  });
+
+  // ── Admin form submit ─────────────────────────────────────────────────
+  window.adminSubmitSpecial = function(e) {
+    e.preventDefault();
+    const name  = document.getElementById("f-name").value.trim();
+    const desc  = document.getElementById("f-desc").value.trim();
+    const price = document.getElementById("f-price").value.trim();
+    const emoji = document.getElementById("f-emoji").value.trim() || "🍽️";
+    if (!name || !price) return;
+    push(specialsRef, { name, description: desc, price, emoji, date: todayKey() });
+    document.getElementById("f-name").value  = "";
+    document.getElementById("f-desc").value  = "";
+    document.getElementById("f-price").value = "";
+    document.getElementById("f-emoji").value = "";
+  };
+
+  // ── Admin login ───────────────────────────────────────────────────────
+  let isAdmin = false;
+
+  window.openAdminPanel = function() {
+    document.getElementById("admin-overlay").classList.add("open");
+    if (isAdmin) showAdminPanel(); else showLoginPanel();
+  };
+  window.closeAdminOverlay = function() {
+    document.getElementById("admin-overlay").classList.remove("open");
+  };
+
+  function showLoginPanel() {
+    document.getElementById("login-panel").style.display = "block";
+    document.getElementById("admin-panel").style.display  = "none";
+  }
+  function showAdminPanel() {
+    document.getElementById("login-panel").style.display = "none";
+    document.getElementById("admin-panel").style.display  = "block";
+  }
+
+  window.doAdminLogin = function(e) {
+    e.preventDefault();
+    const pwd = document.getElementById("admin-pwd").value;
+    if (pwd === ADMIN_PASSWORD) {
+      isAdmin = true;
+      document.getElementById("login-error").style.display = "none";
+      showAdminPanel();
+    } else {
+      document.getElementById("login-error").style.display = "block";
+    }
+  };
+
+  window.doAdminLogout = function() {
+    isAdmin = false;
+    document.getElementById("admin-pwd").value = "";
+    showLoginPanel();
+  };
+</script>
+<style>
+/* ══════════════════════════════════════════
+   TOKENS
+══════════════════════════════════════════ */
+:root {
+  --ink:        #1A0A00;
+  --saffron:    #E8760A;
+  --deep:       #B85500;
+  --gold:       #F5B800;
+  --cream:      #FFF8EE;
+  --warm:       #FFF1D6;
+  --rust:       #C24B00;
+  --white:      #FFFFFF;
+  --green:      #1F6B2E;
+  --muted:      #6B4C2A;
+  --nav-h:      72px;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+
+body{
+  font-family:'DM Sans',sans-serif;
+  background:var(--cream);
+  color:var(--ink);
+  overflow-x:hidden;
+}
+
+/* ══════════════════════════════════════════
+   STICKY NAV
+══════════════════════════════════════════ */
+.nav{
+  position:fixed;top:0;left:0;right:0;
+  height:var(--nav-h);
+  background:rgba(26,10,0,0.92);
+  backdrop-filter:blur(14px);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 5%;
+  z-index:100;
+  border-bottom:2px solid rgba(245,184,0,0.25);
+}
+.nav-brand{
+  display:flex;align-items:center;gap:12px;
+}
+.nav-logo-wrap svg{width:44px;height:44px;}
+.nav-name{
+  font-family:'Libre Baskerville',serif;
+  color:var(--gold);
+  font-size:1.15rem;
+  font-weight:700;
+  line-height:1.1;
+}
+.nav-name span{
+  display:block;
+  font-family:'DM Sans',sans-serif;
+  font-size:0.65rem;
+  color:rgba(255,255,255,0.5);
+  font-weight:400;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  margin-top:2px;
+}
+.nav-links{
+  display:flex;gap:28px;list-style:none;
+}
+.nav-links a{
+  color:rgba(255,255,255,0.7);
+  text-decoration:none;
+  font-size:0.88rem;
+  font-weight:500;
+  letter-spacing:0.04em;
+  transition:color 0.2s;
+}
+.nav-links a:hover{color:var(--gold);}
+.nav-cta{
+  background:var(--saffron);
+  color:var(--white)!important;
+  padding:8px 20px;
+  border-radius:4px;
+  font-weight:700!important;
+  transition:background 0.2s!important;
+}
+.nav-cta:hover{background:var(--deep)!important;color:var(--white)!important;}
+
+/* ══════════════════════════════════════════
+   HERO
+══════════════════════════════════════════ */
+.hero{
+  min-height:100vh;
+  padding-top:var(--nav-h);
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  align-items:center;
+  background:var(--ink);
+}
+
+/* Textured pattern overlay */
+.hero::before{
+  content:'';
+  position:absolute;inset:0;
+  background-image:
+    radial-gradient(ellipse 70% 60% at 70% 50%, rgba(232,118,10,0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 20% 80%, rgba(245,184,0,0.10) 0%, transparent 55%);
+  pointer-events:none;
+}
+
+/* Diagonal food-motif stripe */
+.hero-stripe{
+  position:absolute;
+  top:0;bottom:0;right:0;
+  width:52%;
+  background:linear-gradient(160deg, #2A1200 0%, #1A0A00 100%);
+  clip-path:polygon(8% 0, 100% 0, 100% 100%, 0% 100%);
+  z-index:0;
+}
+
+.hero-left{
+  position:relative;z-index:2;
+  padding:80px 6% 80px 8%;
+}
+
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(245,184,0,0.12);
+  border:1px solid rgba(245,184,0,0.35);
+  color:var(--gold);
+  font-size:0.72rem;
+  font-weight:700;
+  letter-spacing:0.2em;
+  text-transform:uppercase;
+  padding:6px 16px;
+  border-radius:2px;
+  margin-bottom:28px;
+  animation:fadeUp 0.8s ease both;
+}
+.hero-eyebrow::before{content:''; display:block; width:18px; height:1px; background:var(--gold);}
+
+.hero-h1{
+  font-family:'Bebas Neue',cursive;
+  font-size:clamp(4.5rem,9vw,8.5rem);
+  color:var(--white);
+  line-height:0.92;
+  letter-spacing:0.02em;
+  margin-bottom:6px;
+  animation:fadeUp 0.9s 0.1s ease both;
+}
+.hero-h1 em{
+  font-style:normal;
+  color:var(--gold);
+  display:block;
+  -webkit-text-stroke:2px var(--gold);
+  color:transparent;
+}
+.hero-h1 strong{
+  font-style:normal;
+  color:var(--saffron);
+}
+
+.hero-tagline{
+  font-family:'Libre Baskerville',serif;
+  font-style:italic;
+  font-size:clamp(1rem,1.8vw,1.25rem);
+  color:rgba(255,255,255,0.6);
+  margin:20px 0 36px;
+  line-height:1.5;
+  animation:fadeUp 0.9s 0.2s ease both;
+}
+.hero-tagline b{color:rgba(255,255,255,0.9);font-style:normal;}
+
+.hero-pills{
+  display:flex;flex-wrap:wrap;gap:10px;
+  margin-bottom:40px;
+  animation:fadeUp 0.9s 0.3s ease both;
+}
+.hero-pill{
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(255,255,255,0.15);
+  color:rgba(255,255,255,0.75);
+  font-size:0.82rem;
+  font-weight:500;
+  padding:7px 16px;
+  border-radius:2px;
+}
+
+.hero-btns{
+  display:flex;gap:14px;flex-wrap:wrap;
+  animation:fadeUp 0.9s 0.4s ease both;
+}
+.btn{
+  padding:15px 34px;
+  border-radius:3px;
+  font-weight:700;
+  font-size:0.9rem;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  cursor:pointer;border:none;
+  text-decoration:none;display:inline-block;
+  transition:transform 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.3);}
+.btn-primary{background:var(--saffron);color:var(--white);}
+.btn-primary:hover{background:var(--deep);}
+.btn-ghost{background:transparent;color:var(--white);border:1.5px solid rgba(255,255,255,0.35);}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold);}
+
+/* HERO RIGHT — logo + decorative */
+.hero-right{
+  position:relative;z-index:2;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:80px 8% 80px 4%;
+  gap:32px;
+}
+
+.hero-logo-ring{
+  position:relative;
+  width:220px;height:220px;
+  animation:fadeUp 1s 0.5s ease both;
+}
+.hero-logo-ring::after{
+  content:'';
+  position:absolute;inset:-12px;
+  border-radius:50%;
+  border:1.5px dashed rgba(245,184,0,0.35);
+  animation:spinSlow 18s linear infinite;
+}
+@keyframes spinSlow{to{transform:rotate(360deg);}}
+
+.hero-stat-row{
+  display:flex;gap:28px;
+  animation:fadeUp 1s 0.65s ease both;
+}
+.hero-stat{
+  text-align:center;
+}
+.hero-stat-num{
+  font-family:'Bebas Neue',cursive;
+  font-size:2.2rem;
+  color:var(--gold);
+  line-height:1;
+}
+.hero-stat-label{
+  font-size:0.72rem;
+  color:rgba(255,255,255,0.45);
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  margin-top:3px;
+}
+
+.hero-delivery{
+  display:flex;align-items:center;gap:12px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:4px;
+  padding:12px 18px;
+  animation:fadeUp 1s 0.75s ease both;
+}
+.hero-delivery span{
+  font-size:0.8rem;
+  color:rgba(255,255,255,0.5);
+  text-transform:uppercase;
+  letter-spacing:0.1em;
+}
+.hero-delivery-logos{display:flex;gap:10px;align-items:center;}
+.zomato-badge{
+  background:#E23744;color:#fff;
+  font-size:0.78rem;font-weight:800;
+  padding:4px 10px;border-radius:3px;
+  font-style:italic;
+}
+.swiggy-badge{
+  background:#FC8019;color:#fff;
+  font-size:0.78rem;font-weight:800;
+  padding:4px 10px;border-radius:3px;
+}
+
+/* Floating particles */
+.particle{
+  position:absolute;
+  font-size:1.4rem;
+  opacity:0.08;
+  animation:drift linear infinite;
+  pointer-events:none;
+}
+@keyframes drift{
+  0%{transform:translateY(100vh) rotate(0deg);opacity:0;}
+  5%{opacity:0.09;}
+  95%{opacity:0.09;}
+  100%{transform:translateY(-20vh) rotate(360deg);opacity:0;}
+}
+
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(28px);}
+  to{opacity:1;transform:translateY(0);}
+}
+
+/* ══════════════════════════════════════════
+   MARQUEE TICKER
+══════════════════════════════════════════ */
+.ticker{
+  background:var(--gold);
+  overflow:hidden;
+  white-space:nowrap;
+  padding:12px 0;
+}
+.ticker-inner{
+  display:inline-block;
+  animation:ticker 22s linear infinite;
+  font-family:'Bebas Neue',cursive;
+  font-size:1.1rem;
+  letter-spacing:0.12em;
+  color:var(--ink);
+}
+.ticker-inner span{margin:0 32px;}
+@keyframes ticker{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+
+/* ══════════════════════════════════════════
+   SECTION COMMONS
+══════════════════════════════════════════ */
+.section{padding:96px 5%;}
+.container{max-width:1120px;margin:0 auto;}
+
+.sec-label{
+  display:inline-flex;align-items:center;gap:10px;
+  font-size:0.72rem;font-weight:700;
+  letter-spacing:0.22em;text-transform:uppercase;
+  color:var(--saffron);
+  margin-bottom:14px;
+}
+.sec-label::before,
+.sec-label::after{content:'';display:block;width:28px;height:1.5px;background:var(--saffron);}
+
+.sec-title{
+  font-family:'Libre Baskerville',serif;
+  font-size:clamp(2rem,4vw,3rem);
+  color:var(--ink);
+  line-height:1.1;
+  margin-bottom:48px;
+}
+.sec-title em{
+  font-style:italic;
+  color:var(--saffron);
+}
+
+/* Reveal animation */
+.reveal{opacity:0;transform:translateY(32px);transition:opacity 0.65s ease,transform 0.65s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+/* ══════════════════════════════════════════
+   SPECIALITY GRID
+══════════════════════════════════════════ */
+.spec-section{background:var(--white);}
+
+.spec-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(230px,1fr));
+  gap:2px;
+  border:2px solid var(--ink);
+}
+
+.spec-item{
+  background:var(--cream);
+  padding:28px 24px;
+  display:flex;flex-direction:column;
+  border:1px solid rgba(26,10,0,0.08);
+  position:relative;
+  overflow:hidden;
+  cursor:default;
+  transition:background 0.25s,transform 0.25s;
+  opacity:0;transform:scale(0.96);
+  transition:opacity 0.5s ease,transform 0.5s ease,background 0.25s;
+}
+.spec-item.visible{opacity:1;transform:scale(1);}
+.spec-item:hover{background:var(--warm);}
+
+.spec-item::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;
+  width:3px;height:0;
+  background:var(--saffron);
+  transition:height 0.3s ease;
+}
+.spec-item:hover::before{height:100%;}
+
+.spec-emoji{font-size:2rem;margin-bottom:12px;display:block;}
+.spec-name{
+  font-family:'Libre Baskerville',serif;
+  font-size:1rem;
+  color:var(--ink);
+  line-height:1.3;
+  flex:1;
+  margin-bottom:14px;
+}
+.spec-price{
+  font-family:'Bebas Neue',cursive;
+  font-size:1.8rem;
+  color:var(--saffron);
+  letter-spacing:0.03em;
+}
+.spec-price sup{font-size:0.9rem;vertical-align:top;margin-top:5px;display:inline-block;}
+
+/* ══════════════════════════════════════════
+   TODAY'S SPECIAL
+══════════════════════════════════════════ */
+.special-section{
+  background:var(--ink);
+  position:relative;
+  overflow:hidden;
+}
+.special-section::before{
+  content:'TODAY\'S SPECIAL';
+  position:absolute;
+  top:50%;left:50%;
+  transform:translate(-50%,-50%);
+  font-family:'Bebas Neue',cursive;
+  font-size:clamp(5rem,14vw,13rem);
+  color:rgba(255,255,255,0.03);
+  white-space:nowrap;
+  pointer-events:none;
+  letter-spacing:0.05em;
+}
+
+.special-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:2px;
+  position:relative;z-index:1;
+}
+.special-item{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  padding:40px 32px;
+  text-align:center;
+  position:relative;
+  transition:background 0.25s;
+}
+.special-item:hover{background:rgba(232,118,10,0.12);}
+.special-item-emoji{font-size:2.8rem;margin-bottom:16px;display:block;}
+.special-item-name{
+  font-family:'Libre Baskerville',serif;
+  font-size:1.2rem;
+  color:var(--white);
+  margin-bottom:20px;
+  line-height:1.3;
+}
+.special-item-name small{
+  display:block;
+  font-size:0.75rem;
+  color:rgba(255,255,255,0.4);
+  font-family:'DM Sans',sans-serif;
+  margin-top:4px;
+  font-style:normal;
+}
+.special-price{
+  font-family:'Bebas Neue',cursive;
+  font-size:3rem;
+  color:var(--gold);
+  line-height:1;
+}
+.special-price sup{font-size:1.2rem;vertical-align:top;margin-top:7px;display:inline-block;}
+.special-ribbon{
+  position:absolute;
+  top:16px;right:16px;
+  background:var(--saffron);
+  color:var(--white);
+  font-size:0.6rem;
+  font-weight:700;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  padding:3px 9px;
+  border-radius:2px;
+}
+
+/* ══════════════════════════════════════════
+   MENU
+══════════════════════════════════════════ */
+.menu-section{background:var(--cream);}
+
+.tab-strip{
+  display:flex;
+  border-bottom:2px solid rgba(26,10,0,0.1);
+  margin-bottom:40px;
+  gap:0;
+  overflow-x:auto;
+}
+.tab-btn{
+  padding:14px 28px;
+  background:transparent;
+  border:none;border-bottom:3px solid transparent;
+  margin-bottom:-2px;
+  font-family:'DM Sans',sans-serif;
+  font-size:0.88rem;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+  cursor:pointer;
+  transition:color 0.2s,border-color 0.2s;
+  white-space:nowrap;
+}
+.tab-btn.active,.tab-btn:hover{color:var(--saffron);border-bottom-color:var(--saffron);}
+
+.tab-panel{display:none;}
+.tab-panel.active{display:block;animation:fadeUp 0.35s ease both;}
+
+.menu-list{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+  gap:1px;
+  background:rgba(26,10,0,0.08);
+  border:1px solid rgba(26,10,0,0.08);
+}
+.menu-row{
+  background:var(--white);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:18px 22px;
+  transition:background 0.18s;
+  gap:12px;
+}
+.menu-row:hover{background:var(--warm);}
+.menu-row-name{
+  font-size:0.97rem;
+  color:var(--ink);
+  font-weight:500;
+  line-height:1.3;
+}
+.menu-row-note{
+  display:block;
+  font-size:0.74rem;
+  color:var(--green);
+  font-weight:700;
+  margin-top:2px;
+}
+.menu-row-price{
+  font-family:'Bebas Neue',cursive;
+  font-size:1.5rem;
+  color:var(--saffron);
+  letter-spacing:0.03em;
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.mrp-tag{
+  font-family:'DM Sans',sans-serif;
+  font-size:0.72rem;
+  font-weight:700;
+  background:rgba(26,10,0,0.07);
+  color:var(--muted);
+  padding:3px 8px;
+  border-radius:2px;
+  letter-spacing:0.08em;
+}
+
+/* ══════════════════════════════════════════
+   CONTACT
+══════════════════════════════════════════ */
+.contact-section{
+  background:var(--ink);
+  position:relative;overflow:hidden;
+}
+
+.contact-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:2px;
+}
+.contact-card{
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  padding:44px 36px;
+  text-align:center;
+  transition:background 0.25s;
+}
+.contact-card:hover{background:rgba(232,118,10,0.1);}
+.contact-icon{
+  width:56px;height:56px;
+  background:rgba(245,184,0,0.12);
+  border:1px solid rgba(245,184,0,0.3);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.6rem;
+  margin:0 auto 20px;
+}
+.contact-card h3{
+  font-family:'Libre Baskerville',serif;
+  font-size:1.05rem;
+  color:var(--gold);
+  margin-bottom:10px;
+}
+.contact-card p{
+  color:rgba(255,255,255,0.55);
+  font-size:0.9rem;
+  line-height:1.7;
+}
+.contact-card a{
+  color:var(--saffron);
+  font-weight:600;
+  text-decoration:none;
+  transition:color 0.2s;
+}
+.contact-card a:hover{color:var(--gold);}
+
+/* ══════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════ */
+footer{
+  background:#0F0500;
+  padding:48px 5%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:24px;
+  border-top:1px solid rgba(245,184,0,0.15);
+}
+.footer-brand{display:flex;align-items:center;gap:14px;}
+.footer-name{
+  font-family:'Libre Baskerville',serif;
+  color:var(--gold);
+  font-size:1.1rem;
+  font-weight:700;
+}
+.footer-name span{
+  display:block;
+  font-family:'DM Sans',sans-serif;
+  font-size:0.68rem;
+  color:rgba(255,255,255,0.35);
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  margin-top:2px;
+  font-weight:400;
+}
+.footer-copy{
+  font-size:0.78rem;
+  color:rgba(255,255,255,0.25);
+  letter-spacing:0.04em;
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media(max-width:860px){
+  .hero{grid-template-columns:1fr;}
+  .hero-stripe{display:none;}
+  .hero-left{padding:60px 6%;}
+  .hero-right{padding:40px 6% 60px;}
+  .nav-links{display:none;}
+  .special-grid{grid-template-columns:1fr;}
+  .contact-grid{grid-template-columns:1fr;}
+  .spec-grid{grid-template-columns:repeat(2,1fr);}
+}
+@media(max-width:520px){
+  .spec-grid{grid-template-columns:1fr;}
+  .menu-list{grid-template-columns:1fr;}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:0.01ms!important;transition-duration:0.01ms!important;}
+}
+
+/* ══════════════════════════════════════════
+   ADMIN PANEL
+══════════════════════════════════════════ */
+#admin-login-btn{
+  background:transparent;
+  border:none;
+  color:rgba(255,255,255,0.08);
+  font-size:0.6rem;
+  cursor:pointer;
+  letter-spacing:0.1em;
+  padding:4px 8px;
+  transition:color 0.3s;
+}
+#admin-login-btn:hover{color:rgba(255,255,255,0.35);}
+
+/* Modal overlay */
+.modal-overlay{
+  display:none;
+  position:fixed;inset:0;
+  background:rgba(0,0,0,0.75);
+  z-index:999;
+  align-items:center;
+  justify-content:center;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.open{display:flex;}
+
+.modal-box{
+  background:var(--ink);
+  border:1px solid rgba(245,184,0,0.25);
+  border-radius:8px;
+  padding:40px;
+  width:min(540px,92vw);
+  max-height:88vh;
+  overflow-y:auto;
+  position:relative;
+}
+.modal-close{
+  position:absolute;top:16px;right:20px;
+  background:transparent;border:none;
+  color:rgba(255,255,255,0.4);
+  font-size:1.4rem;cursor:pointer;
+  transition:color 0.2s;
+}
+.modal-close:hover{color:var(--gold);}
+.modal-title{
+  font-family:'Libre Baskerville',serif;
+  color:var(--gold);
+  font-size:1.4rem;
+  margin-bottom:28px;
+}
+
+/* Admin form */
+.admin-field{margin-bottom:18px;}
+.admin-field label{
+  display:block;
+  font-size:0.75rem;
+  font-weight:700;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.5);
+  margin-bottom:6px;
+}
+.admin-field input, .admin-field select{
+  width:100%;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:4px;
+  padding:10px 14px;
+  color:var(--white);
+  font-family:'DM Sans',sans-serif;
+  font-size:0.95rem;
+  outline:none;
+  transition:border-color 0.2s;
+}
+.admin-field input:focus, .admin-field select:focus{border-color:var(--gold);}
+.admin-field select option{background:var(--ink);color:var(--white);}
+
+.admin-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+.btn-admin{
+  background:var(--saffron);
+  color:var(--white);
+  border:none;
+  padding:12px 28px;
+  border-radius:4px;
+  font-weight:700;
+  font-size:0.88rem;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  cursor:pointer;
+  width:100%;
+  margin-top:8px;
+  transition:background 0.2s;
+}
+.btn-admin:hover{background:var(--deep);}
+
+.admin-list{margin-top:32px;}
+.admin-list-title{
+  font-size:0.72rem;
+  font-weight:700;
+  letter-spacing:0.15em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.35);
+  margin-bottom:14px;
+  padding-bottom:8px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.admin-item-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:12px 0;
+  border-bottom:1px solid rgba(255,255,255,0.05);
+}
+.admin-item-emoji{font-size:1.4rem;flex-shrink:0;}
+.admin-item-info{flex:1;}
+.admin-item-name{color:var(--white);font-size:0.95rem;font-weight:500;}
+.admin-item-sub{font-size:0.75rem;color:rgba(255,255,255,0.35);margin-top:2px;}
+.admin-item-price{
+  font-family:'Bebas Neue',cursive;
+  font-size:1.4rem;
+  color:var(--gold);
+  flex-shrink:0;
+}
+.btn-del{
+  background:transparent;
+  border:1px solid rgba(255,80,80,0.4);
+  color:rgba(255,80,80,0.7);
+  border-radius:4px;
+  padding:5px 10px;
+  font-size:0.72rem;
+  font-weight:700;
+  cursor:pointer;
+  transition:all 0.2s;
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.btn-del:hover{background:rgba(255,80,80,0.15);border-color:rgba(255,80,80,0.7);color:#ff5050;}
+
+/* Special empty state */
+.special-empty{
+  grid-column:1/-1;
+  text-align:center;
+  padding:60px 20px;
+  color:rgba(255,255,255,0.25);
+  font-family:'Libre Baskerville',serif;
+  font-style:italic;
+  font-size:1.1rem;
+}
+.special-loading{
+  grid-column:1/-1;
+  text-align:center;
+  padding:40px;
+  color:rgba(255,255,255,0.3);
+  font-size:0.85rem;
+  letter-spacing:0.08em;
+}
+
+/* Login panel */
+.login-panel{}
+.login-error{
+  color:#ff6b6b;
+  font-size:0.82rem;
+  margin-top:8px;
+  display:none;
+}
+.admin-status-bar{
+  background:rgba(245,184,0,0.08);
+  border:1px solid rgba(245,184,0,0.2);
+  border-radius:4px;
+  padding:10px 16px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:24px;
+}
+.admin-status-text{color:var(--gold);font-size:0.82rem;font-weight:600;}
+.btn-logout{
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.15);
+  color:rgba(255,255,255,0.5);
+  border-radius:3px;
+  padding:4px 12px;
+  font-size:0.75rem;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+.btn-logout:hover{border-color:rgba(255,80,80,0.5);color:#ff6b6b;}
+</style>
+</head>
+<body>
+
+<!-- ══ NAV ══ -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-logo-wrap">
+      <svg viewBox="0 0 130 130" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="65" cy="65" r="63" fill="#F5B800"/>
+        <circle cx="65" cy="65" r="56" fill="#1A0A00"/>
+        <circle cx="65" cy="65" r="50" fill="none" stroke="#F5B800" stroke-width="1.5"/>
+        <!-- flame -->
+        <path d="M65 18 C72 26 77 36 72 46 C69 52 65 54 65 54 C65 54 61 52 58 46 C53 36 58 26 65 18Z" fill="#E8760A"/>
+        <path d="M65 26 C69 32 71 39 68 44 C67 47 65 48 65 48 C65 48 63 47 62 44 C59 39 61 32 65 26Z" fill="#F5B800"/>
+        <!-- bowl -->
+        <ellipse cx="65" cy="74" rx="23" ry="6.5" fill="none" stroke="#E8760A" stroke-width="2.5"/>
+        <path d="M42 74 Q42 90 65 92 Q88 90 88 74" fill="rgba(232,118,10,0.2)" stroke="#E8760A" stroke-width="2.5" fill-rule="evenodd"/>
+        <!-- steam -->
+        <path d="M55 65 Q52 58 55 52" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        <path d="M65 63 Q62 56 65 50" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        <path d="M75 65 Q72 58 75 52" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        <!-- text -->
+        <text x="65" y="107" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="13.5" fill="#F5B800" letter-spacing="0.8">Sainath</text>
+        <text x="65" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="6.5" fill="rgba(255,255,255,0.65)" letter-spacing="2.5">NASTA HOUSE</text>
+      </svg>
+    </div>
+    <div class="nav-name">Sainath Nasta House<span>The Real Taste of Bhavnagar</span></div>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#speciality">Speciality</a></li>
+    <li><a href="#special">Today's Special</a></li>
+    <li><a href="#menu">Menu</a></li>
+    <li><a href="#contact" class="nav-cta">Contact</a></li>
+  </ul>
+</nav>
+
+<!-- ══ HERO ══ -->
+<section class="hero">
+  <div class="hero-stripe"></div>
+
+  <!-- particles -->
+  <div class="particle" style="left:8%;animation-duration:15s;animation-delay:0s;">🫓</div>
+  <div class="particle" style="left:20%;animation-duration:20s;animation-delay:4s;">🍛</div>
+  <div class="particle" style="left:35%;animation-duration:13s;animation-delay:8s;">🥘</div>
+  <div class="particle" style="left:55%;animation-duration:17s;animation-delay:2s;">🫔</div>
+  <div class="particle" style="left:72%;animation-duration:22s;animation-delay:6s;">🍚</div>
+  <div class="particle" style="left:88%;animation-duration:16s;animation-delay:3s;">🥣</div>
+
+  <div class="hero-left">
+    <div class="hero-eyebrow">The Real Taste of Bhavnagar</div>
+    <h1 class="hero-h1">
+      <em>Sainath</em>
+      <strong>Nasta</strong>
+      House
+    </h1>
+    <p class="hero-tagline">
+      <b>Authentic Gujarati breakfast</b> crafted fresh every morning.<br>
+      Hot off the tawa, straight to your plate.
+    </p>
+    <div class="hero-pills">
+      <span class="hero-pill">🫓 Puri Shak</span>
+      <span class="hero-pill">🍛 Dal Pakwan</span>
+      <span class="hero-pill">🥘 Chole Bhature</span>
+      <span class="hero-pill">🥞 Thepla</span>
+    </div>
+    <div class="hero-btns">
+      <a href="#menu" class="btn btn-primary">View Full Menu</a>
+      <a href="#contact" class="btn btn-ghost">Find Us</a>
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="hero-logo-ring">
+      <svg viewBox="0 0 130 130" xmlns="http://www.w3.org/2000/svg" width="220" height="220">
+        <circle cx="65" cy="65" r="63" fill="#F5B800"/>
+        <circle cx="65" cy="65" r="56" fill="#1A0A00"/>
+        <circle cx="65" cy="65" r="50" fill="none" stroke="#F5B800" stroke-width="1.5"/>
+        <path d="M65 18 C72 26 77 36 72 46 C69 52 65 54 65 54 C65 54 61 52 58 46 C53 36 58 26 65 18Z" fill="#E8760A"/>
+        <path d="M65 26 C69 32 71 39 68 44 C67 47 65 48 65 48 C65 48 63 47 62 44 C59 39 61 32 65 26Z" fill="#F5B800"/>
+        <ellipse cx="65" cy="74" rx="23" ry="6.5" fill="none" stroke="#E8760A" stroke-width="2.5"/>
+        <path d="M42 74 Q42 90 65 92 Q88 90 88 74" fill="rgba(232,118,10,0.2)" stroke="#E8760A" stroke-width="2.5"/>
+        <path d="M55 65 Q52 58 55 52" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        <path d="M65 63 Q62 56 65 50" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        <path d="M75 65 Q72 58 75 52" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+        <text x="65" y="107" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="13.5" fill="#F5B800" letter-spacing="0.8">Sainath</text>
+        <text x="65" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="6.5" fill="rgba(255,255,255,0.65)" letter-spacing="2.5">NASTA HOUSE</text>
+      </svg>
+    </div>
+
+    <div class="hero-stat-row">
+      <div class="hero-stat">
+        <div class="hero-stat-num">100%</div>
+        <div class="hero-stat-label">Pure Veg</div>
+      </div>
+      <div class="hero-stat" style="border-left:1px solid rgba(255,255,255,0.1);border-right:1px solid rgba(255,255,255,0.1);padding:0 28px;">
+        <div class="hero-stat-num">Fresh</div>
+        <div class="hero-stat-label">Daily Made</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">₹10</div>
+        <div class="hero-stat-label">Starts From</div>
+      </div>
+    </div>
+
+    <div class="hero-delivery">
+      <span>Order Online</span>
+      <div class="hero-delivery-logos">
+        <span class="zomato-badge">zomato</span>
+        <span class="swiggy-badge">SWIGGY</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ TICKER ══ -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-inner">
+    <span>🫓 Puri Shak</span><span>🥘 Dal Pakwan</span><span>🍛 Chole Bhature</span><span>🥞 Thepla Combo</span><span>🍚 Veg Pulav</span><span>🫘 Mag Moong</span><span>🧄 Lasaniya Bateta</span><span>🍲 Rasam Ras</span><span>🫓 Puri Shak</span><span>🥘 Dal Pakwan</span><span>🍛 Chole Bhature</span><span>🥞 Thepla Combo</span><span>🍚 Veg Pulav</span><span>🫘 Mag Moong</span><span>🧄 Lasaniya Bateta</span><span>🍲 Rasam Ras</span>
+  </div>
+</div>
+
+<!-- ══ SPECIALITY ══ -->
+<section id="speciality" class="section spec-section">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:48px;">
+      <div class="sec-label reveal" style="justify-content:center;">Our Speciality</div>
+      <h2 class="sec-title reveal" style="margin-bottom:0;">House <em>Favourites</em></h2>
+    </div>
+
+    <div class="spec-grid">
+
+      <div class="spec-item">
+        <span class="spec-emoji">🫓</span>
+        <div class="spec-name">Puri Shak<br><small style="font-size:0.78rem;color:var(--muted);">5 Puri</small></div>
+        <div class="spec-price"><sup>₹</sup>100</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🥞</span>
+        <div class="spec-name">Parotha Shak<br><small style="font-size:0.78rem;color:var(--muted);">2 Parotha</small></div>
+        <div class="spec-price"><sup>₹</sup>100</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🫔</span>
+        <div class="spec-name">Dal Puri<br><small style="font-size:0.78rem;color:var(--muted);">5 Puri</small></div>
+        <div class="spec-price"><sup>₹</sup>100</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🥣</span>
+        <div class="spec-name">Dal Pakwan</div>
+        <div class="spec-price"><sup>₹</sup>100</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🍛</span>
+        <div class="spec-name">Chole Puri<br><small style="font-size:0.78rem;color:var(--muted);">5 Puri</small></div>
+        <div class="spec-price"><sup>₹</sup>90</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🫙</span>
+        <div class="spec-name">Chole Bhature<br><small style="font-size:0.78rem;color:var(--muted);">2 Bhature</small></div>
+        <div class="spec-price"><sup>₹</sup>100</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🫓</span>
+        <div class="spec-name">Thepla – Dahi<br><small style="font-size:0.78rem;color:var(--muted);">2 Thepla</small></div>
+        <div class="spec-price"><sup>₹</sup>70</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🌿</span>
+        <div class="spec-name">Thepla – Suki Bhaji<br><small style="font-size:0.78rem;color:var(--muted);">2 Thepla</small></div>
+        <div class="spec-price"><sup>₹</sup>70</div>
+      </div>
+
+      <div class="spec-item">
+        <span class="spec-emoji">🥔</span>
+        <div class="spec-name">Thepla – Aloo Sabji<br><small style="font-size:0.78rem;color:var(--muted);">2 Thepla</small></div>
+        <div class="spec-price"><sup>₹</sup>70</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ TODAY'S SPECIAL ══ -->
+<section id="special" class="section special-section">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:56px;">
+      <div class="sec-label reveal" style="justify-content:center;color:var(--gold);">
+        <span style="background:var(--saffron);width:28px;height:1.5px;"></span>
+        Limited Time
+        <span style="background:var(--saffron);width:28px;height:1.5px;"></span>
+      </div>
+      <h2 class="sec-title reveal" style="color:var(--white);margin-bottom:0;">Today's <em>Special</em></h2>
+    </div>
+
+    <div class="special-grid reveal" id="special-grid-dynamic" style="grid-template-columns:repeat(3,1fr);">
+      <div class="special-loading">Loading today's specials…</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ MENU ══ -->
+<section id="menu" class="section menu-section">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:0;">
+      <div class="sec-label reveal" style="justify-content:center;">Full Menu</div>
+      <h2 class="sec-title reveal">What We <em>Serve</em></h2>
+    </div>
+
+    <div class="tab-strip reveal">
+      <button class="tab-btn active" onclick="switchTab('roti',this)">Roti &amp; Bread</button>
+      <button class="tab-btn" onclick="switchTab('sabji',this)">Sabji</button>
+      <button class="tab-btn" onclick="switchTab('rice',this)">Rice</button>
+      <button class="tab-btn" onclick="switchTab('extra',this)">Extras</button>
+    </div>
+
+    <!-- Roti -->
+    <div id="tab-roti" class="tab-panel active">
+      <div class="menu-list">
+        <div class="menu-row"><span class="menu-row-name">Plain Roti</span><span class="menu-row-price">₹10</span></div>
+        <div class="menu-row"><span class="menu-row-name">Butter Roti</span><span class="menu-row-price">₹15</span></div>
+        <div class="menu-row"><span class="menu-row-name">Masala Roti</span><span class="menu-row-price">₹20</span></div>
+        <div class="menu-row"><span class="menu-row-name">Sada Parotha</span><span class="menu-row-price">₹30</span></div>
+        <div class="menu-row"><span class="menu-row-name">Aaloo Parotha</span><span class="menu-row-price">₹50</span></div>
+        <div class="menu-row"><span class="menu-row-name">Puri (5 Pcs.)</span><span class="menu-row-price">₹40</span></div>
+        <div class="menu-row"><span class="menu-row-name">Thepla</span><span class="menu-row-price">₹15</span></div>
+      </div>
+    </div>
+
+    <!-- Sabji -->
+    <div id="tab-sabji" class="tab-panel">
+      <div class="menu-list">
+        <div class="menu-row"><span class="menu-row-name">Aaloo Sabji</span><span class="menu-row-price">₹40</span></div>
+        <div class="menu-row"><span class="menu-row-name">Sukhi Bhaji (Aaloo)</span><span class="menu-row-price">₹40</span></div>
+        <div class="menu-row"><span class="menu-row-name">Chole Sabji</span><span class="menu-row-price">₹50</span></div>
+        <div class="menu-row"><span class="menu-row-name">Chana Dal</span><span class="menu-row-price">₹50</span></div>
+        <div class="menu-row"><span class="menu-row-name">Dal Tadka</span><span class="menu-row-price">₹50</span></div>
+        <div class="menu-row"><span class="menu-row-name">Paneer Sabji<span class="menu-row-note">Every Friday only</span></span><span class="menu-row-price">₹70</span></div>
+        <div class="menu-row"><span class="menu-row-name">Sev Tameta</span><span class="menu-row-price">₹50</span></div>
+        <div class="menu-row"><span class="menu-row-name">Sev Gathiya</span><span class="menu-row-price">₹50</span></div>
+      </div>
+    </div>
+
+    <!-- Rice -->
+    <div id="tab-rice" class="tab-panel">
+      <div class="menu-list">
+        <div class="menu-row"><span class="menu-row-name">Plain Rice</span><span class="menu-row-price">₹30</span></div>
+        <div class="menu-row"><span class="menu-row-name">Dal Rice</span><span class="menu-row-price">₹70</span></div>
+        <div class="menu-row"><span class="menu-row-name">Veg Pulav</span><span class="menu-row-price">₹70</span></div>
+        <div class="menu-row"><span class="menu-row-name">Chole – Rice</span><span class="menu-row-price">₹80</span></div>
+        <div class="menu-row"><span class="menu-row-name">Chole – Veg Pulav</span><span class="menu-row-price">₹100</span></div>
+      </div>
+    </div>
+
+    <!-- Extra -->
+    <div id="tab-extra" class="tab-panel">
+      <div class="menu-list">
+        <div class="menu-row"><span class="menu-row-name">Dahi</span><span class="mrp-tag">MRP</span></div>
+        <div class="menu-row"><span class="menu-row-name">Butter Milk</span><span class="menu-row-price">₹10</span></div>
+        <div class="menu-row"><span class="menu-row-name">Roasted Papad</span><span class="menu-row-price">₹10</span></div>
+        <div class="menu-row"><span class="menu-row-name">Fried Papad</span><span class="menu-row-price">₹15</span></div>
+        <div class="menu-row"><span class="menu-row-name">Mineral Water</span><span class="mrp-tag">MRP</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ CONTACT ══ -->
+<section id="contact" class="section contact-section">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:56px;">
+      <div class="sec-label reveal" style="justify-content:center;color:var(--gold);">Get In Touch</div>
+      <h2 class="sec-title reveal" style="color:var(--white);margin-bottom:0;">Find <em>Us</em></h2>
+    </div>
+    <div class="contact-grid">
+      <div class="contact-card reveal">
+        <div class="contact-icon">📍</div>
+        <h3>Location</h3>
+        <p>Bhavnagar, Gujarat<br>India</p>
+      </div>
+      <div class="contact-card reveal">
+        <div class="contact-icon">📞</div>
+        <h3>Call Us</h3>
+        <p>
+          <a href="tel:9898742599">98987 42599</a><br>
+          <a href="tel:9426424615">94264 24615</a>
+        </p>
+      </div>
+      <div class="contact-card reveal">
+        <div class="contact-icon">🛵</div>
+        <h3>Order Online</h3>
+        <p>
+          <a href="#">Zomato</a> &amp; <a href="#">Swiggy</a><br>
+          <em style="font-size:0.8rem;color:rgba(255,255,255,0.3);">Parcel charges extra</em>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FOOTER ══ -->
+<footer>
+  <div class="footer-brand">
+    <svg viewBox="0 0 130 130" xmlns="http://www.w3.org/2000/svg" width="46" height="46">
+      <circle cx="65" cy="65" r="63" fill="#F5B800"/>
+      <circle cx="65" cy="65" r="56" fill="#1A0A00"/>
+      <circle cx="65" cy="65" r="50" fill="none" stroke="#F5B800" stroke-width="1.5"/>
+      <path d="M65 18 C72 26 77 36 72 46 C69 52 65 54 65 54 C65 54 61 52 58 46 C53 36 58 26 65 18Z" fill="#E8760A"/>
+      <path d="M65 26 C69 32 71 39 68 44 C67 47 65 48 65 48 C65 48 63 47 62 44 C59 39 61 32 65 26Z" fill="#F5B800"/>
+      <ellipse cx="65" cy="74" rx="23" ry="6.5" fill="none" stroke="#E8760A" stroke-width="2.5"/>
+      <path d="M42 74 Q42 90 65 92 Q88 90 88 74" fill="rgba(232,118,10,0.2)" stroke="#E8760A" stroke-width="2.5"/>
+      <path d="M55 65 Q52 58 55 52" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+      <path d="M65 63 Q62 56 65 50" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+      <path d="M75 65 Q72 58 75 52" fill="none" stroke="#F5B800" stroke-width="1.8" stroke-linecap="round" opacity="0.65"/>
+      <text x="65" y="107" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="13.5" fill="#F5B800" letter-spacing="0.8">Sainath</text>
+      <text x="65" y="119" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="6.5" fill="rgba(255,255,255,0.65)" letter-spacing="2.5">NASTA HOUSE</text>
+    </svg>
+    <div class="footer-name">Sainath Nasta House<span>The Real Taste of Bhavnagar</span></div>
+  </div>
+  <div class="footer-copy">© 2026 Sainath Nasta House · All rights reserved</div>
+  <button id="admin-login-btn" onclick="openAdminPanel()">⚙ Admin</button>
+</footer>
+
+<!-- ══ ADMIN MODAL ══ -->
+<div class="modal-overlay" id="admin-overlay" onclick="if(event.target===this)closeAdminOverlay()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeAdminOverlay()">✕</button>
+
+    <!-- Login Panel -->
+    <div id="login-panel">
+      <div class="modal-title">🔐 Admin Login</div>
+      <form onsubmit="doAdminLogin(event)">
+        <div class="admin-field">
+          <label>Password</label>
+          <input type="password" id="admin-pwd" placeholder="Enter admin password" autocomplete="off">
+          <div class="login-error" id="login-error">❌ Incorrect password. Try again.</div>
+        </div>
+        <button type="submit" class="btn-admin">Login</button>
+      </form>
+    </div>
+
+    <!-- Admin Panel (hidden until login) -->
+    <div id="admin-panel" style="display:none;">
+      <div class="admin-status-bar">
+        <span class="admin-status-text">✅ Logged in as Admin</span>
+        <button class="btn-logout" onclick="doAdminLogout()">Logout</button>
+      </div>
+
+      <div class="modal-title">Add Today's Special</div>
+      <form onsubmit="adminSubmitSpecial(event)">
+        <div class="admin-field">
+          <label>Dish Name *</label>
+          <input type="text" id="f-name" placeholder="e.g. Lasaniya Bateka" required>
+        </div>
+        <div class="admin-field">
+          <label>Description</label>
+          <input type="text" id="f-desc" placeholder="e.g. Garlic-spiced potato curry">
+        </div>
+        <div class="admin-row">
+          <div class="admin-field">
+            <label>Price (₹) *</label>
+            <input type="number" id="f-price" placeholder="50" min="1" required>
+          </div>
+          <div class="admin-field">
+            <label>Emoji</label>
+            <input type="text" id="f-emoji" placeholder="🍽️" maxlength="4">
+          </div>
+        </div>
+        <button type="submit" class="btn-admin">➕ Add to Today's Special</button>
+      </form>
+
+      <div class="admin-list">
+        <div class="admin-list-title">Today's Specials (Live)</div>
+        <div id="admin-items-list">
+          <p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// Scroll reveal
+const io = new IntersectionObserver((entries) => {
+  entries.forEach((e, i) => {
+    if (e.isIntersecting) {
+      setTimeout(() => e.target.classList.add('visible'), i * 60);
+      io.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.1 });
+document.querySelectorAll('.reveal, .spec-item').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
