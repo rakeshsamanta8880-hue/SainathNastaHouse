@@ -11,11 +11,9 @@
 
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
   import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
-  import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+  import { getDatabase, ref, push, set, update, onValue, remove, get } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
   // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────
-  // Go to https://console.firebase.google.com → your project →
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
   const firebaseConfig = {
     apiKey: "AIzaSyDgUmnlzR0TjRsc797xvIGPn_BQkHWh5nc",
     authDomain: "sainathnastahouse-adbf7.firebaseapp.com",
@@ -33,23 +31,29 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
   const analytics = getAnalytics(app);
-  const specialsRef = ref(db, "todays_specials");
+
+  const specialsRef    = ref(db, "todays_specials");
+  const favouritesRef  = ref(db, "house_favourites");
+  const menuItemsRef   = ref(db, "menu_items");
 
   // ── Helpers ──────────────────────────────────────────────────────────
   function todayKey() {
-    return new Date().toISOString().slice(0, 10); // "2026-06-28"
+    return new Date().toISOString().slice(0, 10);
+  }
+  function esc(str) {
+    return String(str ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[c]));
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // TODAY'S SPECIAL
+  // ══════════════════════════════════════════════════════════════════
   function renderSpecials(items) {
     const grid = document.getElementById("special-grid-dynamic");
     grid.innerHTML = "";
-    if (!items || Object.keys(items).length === 0) {
-      grid.innerHTML = '<div class="special-empty">✨ Check back soon — today\'s special is being prepared!</div>';
-      return;
-    }
-    // Show only today's items
     const today = todayKey();
-    const todayItems = Object.entries(items).filter(([,v]) => v.date === today);
+    const todayItems = items ? Object.entries(items).filter(([,v]) => v.date === today) : [];
     if (todayItems.length === 0) {
       grid.innerHTML = '<div class="special-empty">✨ Check back soon — today\'s special is being prepared!</div>';
       return;
@@ -60,24 +64,22 @@
       card.className = "special-item";
       card.innerHTML = `
         <span class="special-ribbon">${ribbons[idx % ribbons.length]}</span>
-        <span class="special-item-emoji">${item.emoji || "🍽️"}</span>
-        <div class="special-item-name">${item.name}<small>${item.description || ""}</small></div>
-        <div class="special-price"><sup>₹</sup>${item.price}</div>
+        <span class="special-item-emoji">${esc(item.emoji || "🍽️")}</span>
+        <div class="special-item-name">${esc(item.name)}<small>${esc(item.description || "")}</small></div>
+        <div class="special-price"><sup>₹</sup>${esc(item.price)}</div>
       `;
       grid.appendChild(card);
     });
-    // update grid columns
     const count = todayItems.length;
     grid.style.gridTemplateColumns = count === 1 ? "1fr" : count === 2 ? "repeat(2,1fr)" : "repeat(3,1fr)";
   }
 
-  function renderAdminList(items) {
-    const list = document.getElementById("admin-items-list");
+  function renderSpecialAdminList(items) {
+    const list = document.getElementById("admin-special-list");
     if (!list) return;
     list.innerHTML = "";
-    if (!items) return;
     const today = todayKey();
-    const todayItems = Object.entries(items).filter(([,v]) => v.date === today);
+    const todayItems = items ? Object.entries(items).filter(([,v]) => v.date === today) : [];
     if (todayItems.length === 0) {
       list.innerHTML = '<p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No specials added for today yet.</p>';
       return;
@@ -86,33 +88,44 @@
       const row = document.createElement("div");
       row.className = "admin-item-row";
       row.innerHTML = `
-        <span class="admin-item-emoji">${item.emoji || "🍽️"}</span>
+        <span class="admin-item-emoji">${esc(item.emoji || "🍽️")}</span>
         <div class="admin-item-info">
-          <div class="admin-item-name">${item.name}</div>
-          <div class="admin-item-sub">${item.description || ""}</div>
+          <div class="admin-item-name">${esc(item.name)}</div>
+          <div class="admin-item-sub">${esc(item.description || "")}</div>
         </div>
-        <div class="admin-item-price">₹${item.price}</div>
+        <div class="admin-item-price">₹${esc(item.price)}</div>
+        <button class="btn-edit" data-key="${key}">Edit</button>
         <button class="btn-del" data-key="${key}">Remove</button>
       `;
       list.appendChild(row);
     });
-    // delete handlers
     list.querySelectorAll(".btn-del").forEach(btn => {
+      btn.addEventListener("click", () => remove(ref(db, `todays_specials/${btn.dataset.key}`)));
+    });
+    list.querySelectorAll(".btn-edit").forEach(btn => {
       btn.addEventListener("click", () => {
-        const key = btn.dataset.key;
-        remove(ref(db, `todays_specials/${key}`));
+        const item = (specialsCache || {})[btn.dataset.key];
+        if (!item) return;
+        editingSpecialKey = btn.dataset.key;
+        document.getElementById("f-name").value  = item.name || "";
+        document.getElementById("f-desc").value  = item.description || "";
+        document.getElementById("f-price").value = item.price || "";
+        document.getElementById("f-emoji").value = item.emoji || "";
+        document.getElementById("special-submit-btn").textContent = "💾 Save Changes";
+        document.getElementById("special-cancel-btn").style.display = "inline-block";
       });
     });
   }
 
-  // ── Live listener ─────────────────────────────────────────────────────
+  let specialsCache = null;
+  let editingSpecialKey = null;
+
   onValue(specialsRef, (snap) => {
-    const data = snap.val();
-    renderSpecials(data);
-    renderAdminList(data);
+    specialsCache = snap.val();
+    renderSpecials(specialsCache);
+    renderSpecialAdminList(specialsCache);
   });
 
-  // ── Admin form submit ─────────────────────────────────────────────────
   window.adminSubmitSpecial = function(e) {
     e.preventDefault();
     const name  = document.getElementById("f-name").value.trim();
@@ -120,14 +133,311 @@
     const price = document.getElementById("f-price").value.trim();
     const emoji = document.getElementById("f-emoji").value.trim() || "🍽️";
     if (!name || !price) return;
-    push(specialsRef, { name, description: desc, price, emoji, date: todayKey() });
+    if (editingSpecialKey) {
+      update(ref(db, `todays_specials/${editingSpecialKey}`), { name, description: desc, price, emoji, date: todayKey() });
+    } else {
+      push(specialsRef, { name, description: desc, price, emoji, date: todayKey() });
+    }
+    window.cancelSpecialEdit();
+  };
+  window.cancelSpecialEdit = function() {
+    editingSpecialKey = null;
     document.getElementById("f-name").value  = "";
     document.getElementById("f-desc").value  = "";
     document.getElementById("f-price").value = "";
     document.getElementById("f-emoji").value = "";
+    document.getElementById("special-submit-btn").textContent = "➕ Add to Today's Special";
+    document.getElementById("special-cancel-btn").style.display = "none";
   };
 
-  // ── Admin login ───────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════
+  // HOUSE FAVOURITES
+  // ══════════════════════════════════════════════════════════════════
+  const DEFAULT_FAVOURITES = [
+    { name:"Puri Shak", subtitle:"5 Puri", price:"100", emoji:"🫓", order:1 },
+    { name:"Parotha Shak", subtitle:"2 Parotha", price:"100", emoji:"🥞", order:2 },
+    { name:"Dal Puri", subtitle:"5 Puri", price:"100", emoji:"🫔", order:3 },
+    { name:"Dal Pakwan", subtitle:"", price:"100", emoji:"🥣", order:4 },
+    { name:"Chole Puri", subtitle:"5 Puri", price:"90", emoji:"🍛", order:5 },
+    { name:"Chole Bhature", subtitle:"2 Bhature", price:"100", emoji:"🫙", order:6 },
+    { name:"Thepla – Dahi", subtitle:"2 Thepla", price:"70", emoji:"🫓", order:7 },
+    { name:"Thepla – Suki Bhaji", subtitle:"2 Thepla", price:"70", emoji:"🌿", order:8 },
+    { name:"Thepla – Aloo Sabji", subtitle:"2 Thepla", price:"70", emoji:"🥔", order:9 }
+  ];
+
+  let favouritesCache = null;
+  let editingFavKey = null;
+
+  function renderFavourites(items) {
+    const grid = document.getElementById("spec-grid-dynamic");
+    grid.innerHTML = "";
+    if (!items || Object.keys(items).length === 0) {
+      grid.innerHTML = '<div class="special-empty">✨ House favourites coming soon!</div>';
+      return;
+    }
+    const sorted = Object.entries(items).sort((a,b) => (a[1].order||0) - (b[1].order||0));
+    sorted.forEach(([key, item]) => {
+      const el = document.createElement("div");
+      el.className = "spec-item";
+      el.innerHTML = `
+        <span class="spec-emoji">${esc(item.emoji || "🍽️")}</span>
+        <div class="spec-name">${esc(item.name)}${item.subtitle ? `<br><small style="font-size:0.78rem;color:var(--muted);">${esc(item.subtitle)}</small>` : ""}</div>
+        <div class="spec-price"><sup>₹</sup>${esc(item.price)}</div>
+      `;
+      grid.appendChild(el);
+    });
+    // re-observe for scroll reveal animation
+    requestAnimationFrame(() => {
+      document.querySelectorAll("#spec-grid-dynamic .spec-item").forEach(el => io.observe(el));
+    });
+  }
+
+  function renderFavAdminList(items) {
+    const list = document.getElementById("admin-fav-list");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!items || Object.keys(items).length === 0) {
+      list.innerHTML = '<p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No house favourites yet.</p>';
+      return;
+    }
+    const sorted = Object.entries(items).sort((a,b) => (a[1].order||0) - (b[1].order||0));
+    sorted.forEach(([key, item]) => {
+      const row = document.createElement("div");
+      row.className = "admin-item-row";
+      row.innerHTML = `
+        <span class="admin-item-emoji">${esc(item.emoji || "🍽️")}</span>
+        <div class="admin-item-info">
+          <div class="admin-item-name">${esc(item.name)}</div>
+          <div class="admin-item-sub">${esc(item.subtitle || "")}</div>
+        </div>
+        <div class="admin-item-price">₹${esc(item.price)}</div>
+        <button class="btn-edit" data-key="${key}">Edit</button>
+        <button class="btn-del" data-key="${key}">Remove</button>
+      `;
+      list.appendChild(row);
+    });
+    list.querySelectorAll(".btn-del").forEach(btn => {
+      btn.addEventListener("click", () => remove(ref(db, `house_favourites/${btn.dataset.key}`)));
+    });
+    list.querySelectorAll(".btn-edit").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const item = (favouritesCache || {})[btn.dataset.key];
+        if (!item) return;
+        editingFavKey = btn.dataset.key;
+        document.getElementById("fav-name").value = item.name || "";
+        document.getElementById("fav-subtitle").value = item.subtitle || "";
+        document.getElementById("fav-price").value = item.price || "";
+        document.getElementById("fav-emoji").value = item.emoji || "";
+        document.getElementById("fav-submit-btn").textContent = "💾 Save Changes";
+        document.getElementById("fav-cancel-btn").style.display = "inline-block";
+      });
+    });
+  }
+
+  onValue(favouritesRef, async (snap) => {
+    let data = snap.val();
+    if (!data) {
+      // seed once with the original defaults so the site isn't empty
+      const check = await get(favouritesRef);
+      if (!check.exists()) {
+        const seedObj = {};
+        DEFAULT_FAVOURITES.forEach(item => {
+          const newRef = push(favouritesRef);
+          seedObj[newRef.key] = item;
+          set(newRef, item);
+        });
+      }
+      return;
+    }
+    favouritesCache = data;
+    renderFavourites(data);
+    renderFavAdminList(data);
+  });
+
+  window.adminSubmitFav = function(e) {
+    e.preventDefault();
+    const name = document.getElementById("fav-name").value.trim();
+    const subtitle = document.getElementById("fav-subtitle").value.trim();
+    const price = document.getElementById("fav-price").value.trim();
+    const emoji = document.getElementById("fav-emoji").value.trim() || "🍽️";
+    if (!name || !price) return;
+    if (editingFavKey) {
+      update(ref(db, `house_favourites/${editingFavKey}`), { name, subtitle, price, emoji });
+    } else {
+      const existingCount = favouritesCache ? Object.keys(favouritesCache).length : 0;
+      push(favouritesRef, { name, subtitle, price, emoji, order: existingCount + 1 });
+    }
+    window.cancelFavEdit();
+  };
+  window.cancelFavEdit = function() {
+    editingFavKey = null;
+    document.getElementById("fav-name").value = "";
+    document.getElementById("fav-subtitle").value = "";
+    document.getElementById("fav-price").value = "";
+    document.getElementById("fav-emoji").value = "";
+    document.getElementById("fav-submit-btn").textContent = "➕ Add House Favourite";
+    document.getElementById("fav-cancel-btn").style.display = "none";
+  };
+
+  // ══════════════════════════════════════════════════════════════════
+  // FULL MENU (Roti / Sabji / Rice / Extras)
+  // ══════════════════════════════════════════════════════════════════
+  const DEFAULT_MENU = [
+    { name:"Plain Roti", price:"10", category:"roti" },
+    { name:"Butter Roti", price:"15", category:"roti" },
+    { name:"Masala Roti", price:"20", category:"roti" },
+    { name:"Sada Parotha", price:"30", category:"roti" },
+    { name:"Aaloo Parotha", price:"50", category:"roti" },
+    { name:"Puri (5 Pcs.)", price:"40", category:"roti" },
+    { name:"Thepla", price:"15", category:"roti" },
+    { name:"Aaloo Sabji", price:"40", category:"sabji" },
+    { name:"Sukhi Bhaji (Aaloo)", price:"40", category:"sabji" },
+    { name:"Chole Sabji", price:"50", category:"sabji" },
+    { name:"Chana Dal", price:"50", category:"sabji" },
+    { name:"Dal Tadka", price:"50", category:"sabji" },
+    { name:"Paneer Sabji", price:"70", category:"sabji", note:"Every Friday only" },
+    { name:"Sev Tameta", price:"50", category:"sabji" },
+    { name:"Sev Gathiya", price:"50", category:"sabji" },
+    { name:"Plain Rice", price:"30", category:"rice" },
+    { name:"Dal Rice", price:"70", category:"rice" },
+    { name:"Veg Pulav", price:"70", category:"rice" },
+    { name:"Chole – Rice", price:"80", category:"rice" },
+    { name:"Chole – Veg Pulav", price:"100", category:"rice" },
+    { name:"Dahi", price:"", category:"extra", isMrp:true },
+    { name:"Butter Milk", price:"10", category:"extra" },
+    { name:"Roasted Papad", price:"10", category:"extra" },
+    { name:"Fried Papad", price:"15", category:"extra" },
+    { name:"Mineral Water", price:"", category:"extra", isMrp:true }
+  ];
+
+  const CATEGORY_LABELS = { roti:"Roti & Bread", sabji:"Sabji", rice:"Rice", extra:"Extras" };
+  let menuCache = null;
+  let editingMenuKey = null;
+
+  function menuRowHtml(item) {
+    const priceHtml = item.isMrp
+      ? `<span class="mrp-tag">MRP</span>`
+      : `<span class="menu-row-price">₹${esc(item.price)}</span>`;
+    return `
+      <span class="menu-row-name">${esc(item.name)}${item.note ? `<span class="menu-row-note">${esc(item.note)}</span>` : ""}</span>
+      ${priceHtml}
+    `;
+  }
+
+  function renderMenu(items) {
+    ["roti","sabji","rice","extra"].forEach(cat => {
+      const container = document.getElementById("menu-list-" + cat);
+      if (container) container.innerHTML = "";
+    });
+    if (!items) return;
+    Object.entries(items).forEach(([key, item]) => {
+      const container = document.getElementById("menu-list-" + item.category);
+      if (!container) return;
+      const row = document.createElement("div");
+      row.className = "menu-row";
+      row.innerHTML = menuRowHtml(item);
+      container.appendChild(row);
+    });
+  }
+
+  function renderMenuAdminList(items) {
+    const list = document.getElementById("admin-menu-list");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!items || Object.keys(items).length === 0) {
+      list.innerHTML = '<p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">No menu items yet.</p>';
+      return;
+    }
+    const sorted = Object.entries(items).sort((a,b) => a[1].category.localeCompare(b[1].category));
+    sorted.forEach(([key, item]) => {
+      const row = document.createElement("div");
+      row.className = "admin-item-row";
+      row.innerHTML = `
+        <span class="admin-item-emoji" style="font-size:0.68rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--saffron);width:56px;">${esc(CATEGORY_LABELS[item.category] || item.category)}</span>
+        <div class="admin-item-info">
+          <div class="admin-item-name">${esc(item.name)}</div>
+          <div class="admin-item-sub">${esc(item.note || "")}</div>
+        </div>
+        <div class="admin-item-price">${item.isMrp ? "MRP" : "₹" + esc(item.price)}</div>
+        <button class="btn-edit" data-key="${key}">Edit</button>
+        <button class="btn-del" data-key="${key}">Remove</button>
+      `;
+      list.appendChild(row);
+    });
+    list.querySelectorAll(".btn-del").forEach(btn => {
+      btn.addEventListener("click", () => remove(ref(db, `menu_items/${btn.dataset.key}`)));
+    });
+    list.querySelectorAll(".btn-edit").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const item = (menuCache || {})[btn.dataset.key];
+        if (!item) return;
+        editingMenuKey = btn.dataset.key;
+        document.getElementById("menu-name").value = item.name || "";
+        document.getElementById("menu-category").value = item.category || "roti";
+        document.getElementById("menu-price").value = item.price || "";
+        document.getElementById("menu-note").value = item.note || "";
+        document.getElementById("menu-mrp").checked = !!item.isMrp;
+        toggleMenuPriceField();
+        document.getElementById("menu-submit-btn").textContent = "💾 Save Changes";
+        document.getElementById("menu-cancel-btn").style.display = "inline-block";
+      });
+    });
+  }
+
+  onValue(menuItemsRef, async (snap) => {
+    let data = snap.val();
+    if (!data) {
+      const check = await get(menuItemsRef);
+      if (!check.exists()) {
+        DEFAULT_MENU.forEach(item => {
+          const newRef = push(menuItemsRef);
+          set(newRef, item);
+        });
+      }
+      return;
+    }
+    menuCache = data;
+    renderMenu(data);
+    renderMenuAdminList(data);
+  });
+
+  window.toggleMenuPriceField = function() {
+    const isMrp = document.getElementById("menu-mrp").checked;
+    document.getElementById("menu-price").disabled = isMrp;
+    document.getElementById("menu-price").required = !isMrp;
+    if (isMrp) document.getElementById("menu-price").value = "";
+  };
+
+  window.adminSubmitMenu = function(e) {
+    e.preventDefault();
+    const name = document.getElementById("menu-name").value.trim();
+    const category = document.getElementById("menu-category").value;
+    const isMrp = document.getElementById("menu-mrp").checked;
+    const price = isMrp ? "" : document.getElementById("menu-price").value.trim();
+    const note = document.getElementById("menu-note").value.trim();
+    if (!name || (!isMrp && !price)) return;
+    const payload = { name, category, price, isMrp, note };
+    if (editingMenuKey) {
+      update(ref(db, `menu_items/${editingMenuKey}`), payload);
+    } else {
+      push(menuItemsRef, payload);
+    }
+    window.cancelMenuEdit();
+  };
+  window.cancelMenuEdit = function() {
+    editingMenuKey = null;
+    document.getElementById("menu-name").value = "";
+    document.getElementById("menu-price").value = "";
+    document.getElementById("menu-note").value = "";
+    document.getElementById("menu-mrp").checked = false;
+    toggleMenuPriceField();
+    document.getElementById("menu-submit-btn").textContent = "➕ Add Menu Item";
+    document.getElementById("menu-cancel-btn").style.display = "none";
+  };
+
+  // ══════════════════════════════════════════════════════════════════
+  // ADMIN LOGIN / PANEL / TABS
+  // ══════════════════════════════════════════════════════════════════
   let isAdmin = false;
 
   window.openAdminPanel = function() {
@@ -163,6 +473,13 @@
     isAdmin = false;
     document.getElementById("admin-pwd").value = "";
     showLoginPanel();
+  };
+
+  window.switchAdminTab = function(tab, btn) {
+    document.querySelectorAll(".admin-tab-panel").forEach(p => p.classList.remove("active"));
+    document.querySelectorAll(".admin-tab-btn").forEach(b => b.classList.remove("active"));
+    document.getElementById("admin-tab-" + tab).classList.add("active");
+    btn.classList.add("active");
   };
 </script>
 <style>
@@ -968,6 +1285,81 @@ footer{
 }
 .btn-del:hover{background:rgba(255,80,80,0.15);border-color:rgba(255,80,80,0.7);color:#ff5050;}
 
+.btn-edit{
+  background:transparent;
+  border:1px solid rgba(245,184,0,0.4);
+  color:rgba(245,184,0,0.85);
+  border-radius:4px;
+  padding:5px 10px;
+  font-size:0.72rem;
+  font-weight:700;
+  cursor:pointer;
+  transition:all 0.2s;
+  white-space:nowrap;
+  flex-shrink:0;
+}
+.btn-edit:hover{background:rgba(245,184,0,0.15);border-color:var(--gold);color:var(--gold);}
+
+.btn-cancel{
+  background:transparent;
+  color:rgba(255,255,255,0.55);
+  border:1px solid rgba(255,255,255,0.2);
+  padding:12px 20px;
+  border-radius:4px;
+  font-weight:700;
+  font-size:0.82rem;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+  cursor:pointer;
+  margin-top:8px;
+  transition:all 0.2s;
+  display:none;
+}
+.btn-cancel:hover{border-color:rgba(255,255,255,0.4);color:var(--white);}
+
+.admin-form-row{display:flex;gap:10px;align-items:center;}
+.admin-form-row .btn-admin{margin-top:0;}
+
+/* Admin sub-tabs */
+.admin-tab-strip{
+  display:flex;
+  gap:4px;
+  margin-bottom:26px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:6px;
+  padding:4px;
+}
+.admin-tab-btn{
+  flex:1;
+  background:transparent;
+  border:none;
+  color:rgba(255,255,255,0.5);
+  padding:10px 8px;
+  font-family:'DM Sans',sans-serif;
+  font-size:0.76rem;
+  font-weight:700;
+  letter-spacing:0.03em;
+  text-transform:uppercase;
+  border-radius:4px;
+  cursor:pointer;
+  transition:all 0.2s;
+}
+.admin-tab-btn.active{background:var(--saffron);color:var(--white);}
+.admin-tab-btn:hover:not(.active){color:var(--gold);}
+
+.admin-tab-panel{display:none;}
+.admin-tab-panel.active{display:block;animation:fadeUp 0.3s ease both;}
+
+.admin-mrp-check{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+}
+.admin-mrp-check input{width:auto;}
+.admin-mrp-check label{margin:0;text-transform:none;font-size:0.82rem;letter-spacing:0;color:rgba(255,255,255,0.65);}
+
 /* Special empty state */
 .special-empty{
   grid-column:1/-1;
@@ -1147,62 +1539,8 @@ footer{
       <h2 class="sec-title reveal" style="margin-bottom:0;">House <em>Favourites</em></h2>
     </div>
 
-    <div class="spec-grid">
-
-      <div class="spec-item">
-        <span class="spec-emoji">🫓</span>
-        <div class="spec-name">Puri Shak<br><small style="font-size:0.78rem;color:var(--muted);">5 Puri</small></div>
-        <div class="spec-price"><sup>₹</sup>100</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🥞</span>
-        <div class="spec-name">Parotha Shak<br><small style="font-size:0.78rem;color:var(--muted);">2 Parotha</small></div>
-        <div class="spec-price"><sup>₹</sup>100</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🫔</span>
-        <div class="spec-name">Dal Puri<br><small style="font-size:0.78rem;color:var(--muted);">5 Puri</small></div>
-        <div class="spec-price"><sup>₹</sup>100</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🥣</span>
-        <div class="spec-name">Dal Pakwan</div>
-        <div class="spec-price"><sup>₹</sup>100</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🍛</span>
-        <div class="spec-name">Chole Puri<br><small style="font-size:0.78rem;color:var(--muted);">5 Puri</small></div>
-        <div class="spec-price"><sup>₹</sup>90</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🫙</span>
-        <div class="spec-name">Chole Bhature<br><small style="font-size:0.78rem;color:var(--muted);">2 Bhature</small></div>
-        <div class="spec-price"><sup>₹</sup>100</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🫓</span>
-        <div class="spec-name">Thepla – Dahi<br><small style="font-size:0.78rem;color:var(--muted);">2 Thepla</small></div>
-        <div class="spec-price"><sup>₹</sup>70</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🌿</span>
-        <div class="spec-name">Thepla – Suki Bhaji<br><small style="font-size:0.78rem;color:var(--muted);">2 Thepla</small></div>
-        <div class="spec-price"><sup>₹</sup>70</div>
-      </div>
-
-      <div class="spec-item">
-        <span class="spec-emoji">🥔</span>
-        <div class="spec-name">Thepla – Aloo Sabji<br><small style="font-size:0.78rem;color:var(--muted);">2 Thepla</small></div>
-        <div class="spec-price"><sup>₹</sup>70</div>
-      </div>
-
+    <div class="spec-grid" id="spec-grid-dynamic">
+      <div class="special-loading">Loading house favourites…</div>
     </div>
   </div>
 </section>
@@ -1242,51 +1580,22 @@ footer{
 
     <!-- Roti -->
     <div id="tab-roti" class="tab-panel active">
-      <div class="menu-list">
-        <div class="menu-row"><span class="menu-row-name">Plain Roti</span><span class="menu-row-price">₹10</span></div>
-        <div class="menu-row"><span class="menu-row-name">Butter Roti</span><span class="menu-row-price">₹15</span></div>
-        <div class="menu-row"><span class="menu-row-name">Masala Roti</span><span class="menu-row-price">₹20</span></div>
-        <div class="menu-row"><span class="menu-row-name">Sada Parotha</span><span class="menu-row-price">₹30</span></div>
-        <div class="menu-row"><span class="menu-row-name">Aaloo Parotha</span><span class="menu-row-price">₹50</span></div>
-        <div class="menu-row"><span class="menu-row-name">Puri (5 Pcs.)</span><span class="menu-row-price">₹40</span></div>
-        <div class="menu-row"><span class="menu-row-name">Thepla</span><span class="menu-row-price">₹15</span></div>
-      </div>
+      <div class="menu-list" id="menu-list-roti"></div>
     </div>
 
     <!-- Sabji -->
     <div id="tab-sabji" class="tab-panel">
-      <div class="menu-list">
-        <div class="menu-row"><span class="menu-row-name">Aaloo Sabji</span><span class="menu-row-price">₹40</span></div>
-        <div class="menu-row"><span class="menu-row-name">Sukhi Bhaji (Aaloo)</span><span class="menu-row-price">₹40</span></div>
-        <div class="menu-row"><span class="menu-row-name">Chole Sabji</span><span class="menu-row-price">₹50</span></div>
-        <div class="menu-row"><span class="menu-row-name">Chana Dal</span><span class="menu-row-price">₹50</span></div>
-        <div class="menu-row"><span class="menu-row-name">Dal Tadka</span><span class="menu-row-price">₹50</span></div>
-        <div class="menu-row"><span class="menu-row-name">Paneer Sabji<span class="menu-row-note">Every Friday only</span></span><span class="menu-row-price">₹70</span></div>
-        <div class="menu-row"><span class="menu-row-name">Sev Tameta</span><span class="menu-row-price">₹50</span></div>
-        <div class="menu-row"><span class="menu-row-name">Sev Gathiya</span><span class="menu-row-price">₹50</span></div>
-      </div>
+      <div class="menu-list" id="menu-list-sabji"></div>
     </div>
 
     <!-- Rice -->
     <div id="tab-rice" class="tab-panel">
-      <div class="menu-list">
-        <div class="menu-row"><span class="menu-row-name">Plain Rice</span><span class="menu-row-price">₹30</span></div>
-        <div class="menu-row"><span class="menu-row-name">Dal Rice</span><span class="menu-row-price">₹70</span></div>
-        <div class="menu-row"><span class="menu-row-name">Veg Pulav</span><span class="menu-row-price">₹70</span></div>
-        <div class="menu-row"><span class="menu-row-name">Chole – Rice</span><span class="menu-row-price">₹80</span></div>
-        <div class="menu-row"><span class="menu-row-name">Chole – Veg Pulav</span><span class="menu-row-price">₹100</span></div>
-      </div>
+      <div class="menu-list" id="menu-list-rice"></div>
     </div>
 
     <!-- Extra -->
     <div id="tab-extra" class="tab-panel">
-      <div class="menu-list">
-        <div class="menu-row"><span class="menu-row-name">Dahi</span><span class="mrp-tag">MRP</span></div>
-        <div class="menu-row"><span class="menu-row-name">Butter Milk</span><span class="menu-row-price">₹10</span></div>
-        <div class="menu-row"><span class="menu-row-name">Roasted Papad</span><span class="menu-row-price">₹10</span></div>
-        <div class="menu-row"><span class="menu-row-name">Fried Papad</span><span class="menu-row-price">₹15</span></div>
-        <div class="menu-row"><span class="menu-row-name">Mineral Water</span><span class="mrp-tag">MRP</span></div>
-      </div>
+      <div class="menu-list" id="menu-list-extra"></div>
     </div>
 
   </div>
@@ -1373,33 +1682,117 @@ footer{
         <button class="btn-logout" onclick="doAdminLogout()">Logout</button>
       </div>
 
-      <div class="modal-title">Add Today's Special</div>
-      <form onsubmit="adminSubmitSpecial(event)">
-        <div class="admin-field">
-          <label>Dish Name *</label>
-          <input type="text" id="f-name" placeholder="e.g. Lasaniya Bateka" required>
-        </div>
-        <div class="admin-field">
-          <label>Description</label>
-          <input type="text" id="f-desc" placeholder="e.g. Garlic-spiced potato curry">
-        </div>
-        <div class="admin-row">
-          <div class="admin-field">
-            <label>Price (₹) *</label>
-            <input type="number" id="f-price" placeholder="50" min="1" required>
-          </div>
-          <div class="admin-field">
-            <label>Emoji</label>
-            <input type="text" id="f-emoji" placeholder="🍽️" maxlength="4">
-          </div>
-        </div>
-        <button type="submit" class="btn-admin">➕ Add to Today's Special</button>
-      </form>
+      <div class="admin-tab-strip">
+        <button class="admin-tab-btn active" onclick="switchAdminTab('special',this)">Today's Special</button>
+        <button class="admin-tab-btn" onclick="switchAdminTab('fav',this)">House Favourites</button>
+        <button class="admin-tab-btn" onclick="switchAdminTab('menu',this)">Full Menu</button>
+      </div>
 
-      <div class="admin-list">
-        <div class="admin-list-title">Today's Specials (Live)</div>
-        <div id="admin-items-list">
-          <p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</p>
+      <!-- ── Today's Special tab ── -->
+      <div class="admin-tab-panel active" id="admin-tab-special">
+        <div class="modal-title" style="margin-bottom:20px;">Manage Today's Special</div>
+        <form onsubmit="adminSubmitSpecial(event)">
+          <div class="admin-field">
+            <label>Dish Name *</label>
+            <input type="text" id="f-name" placeholder="e.g. Lasaniya Bateka" required>
+          </div>
+          <div class="admin-field">
+            <label>Description</label>
+            <input type="text" id="f-desc" placeholder="e.g. Garlic-spiced potato curry">
+          </div>
+          <div class="admin-row">
+            <div class="admin-field">
+              <label>Price (₹) *</label>
+              <input type="number" id="f-price" placeholder="50" min="1" required>
+            </div>
+            <div class="admin-field">
+              <label>Emoji</label>
+              <input type="text" id="f-emoji" placeholder="🍽️" maxlength="4">
+            </div>
+          </div>
+          <button type="submit" class="btn-admin" id="special-submit-btn">➕ Add to Today's Special</button>
+          <button type="button" class="btn-cancel" id="special-cancel-btn" onclick="cancelSpecialEdit()">Cancel Edit</button>
+        </form>
+        <div class="admin-list">
+          <div class="admin-list-title">Today's Specials (Live)</div>
+          <div id="admin-special-list">
+            <p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── House Favourites tab ── -->
+      <div class="admin-tab-panel" id="admin-tab-fav">
+        <div class="modal-title" style="margin-bottom:20px;">Manage House Favourites</div>
+        <form onsubmit="adminSubmitFav(event)">
+          <div class="admin-field">
+            <label>Dish Name *</label>
+            <input type="text" id="fav-name" placeholder="e.g. Puri Shak" required>
+          </div>
+          <div class="admin-field">
+            <label>Subtitle</label>
+            <input type="text" id="fav-subtitle" placeholder="e.g. 5 Puri">
+          </div>
+          <div class="admin-row">
+            <div class="admin-field">
+              <label>Price (₹) *</label>
+              <input type="number" id="fav-price" placeholder="100" min="1" required>
+            </div>
+            <div class="admin-field">
+              <label>Emoji</label>
+              <input type="text" id="fav-emoji" placeholder="🍽️" maxlength="4">
+            </div>
+          </div>
+          <button type="submit" class="btn-admin" id="fav-submit-btn">➕ Add House Favourite</button>
+          <button type="button" class="btn-cancel" id="fav-cancel-btn" onclick="cancelFavEdit()">Cancel Edit</button>
+        </form>
+        <div class="admin-list">
+          <div class="admin-list-title">House Favourites (Live)</div>
+          <div id="admin-fav-list">
+            <p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Full Menu tab ── -->
+      <div class="admin-tab-panel" id="admin-tab-menu">
+        <div class="modal-title" style="margin-bottom:20px;">Manage Full Menu</div>
+        <form onsubmit="adminSubmitMenu(event)">
+          <div class="admin-field">
+            <label>Item Name *</label>
+            <input type="text" id="menu-name" placeholder="e.g. Butter Roti" required>
+          </div>
+          <div class="admin-row">
+            <div class="admin-field">
+              <label>Category *</label>
+              <select id="menu-category">
+                <option value="roti">Roti &amp; Bread</option>
+                <option value="sabji">Sabji</option>
+                <option value="rice">Rice</option>
+                <option value="extra">Extras</option>
+              </select>
+            </div>
+            <div class="admin-field">
+              <label>Price (₹)</label>
+              <input type="number" id="menu-price" placeholder="15" min="1">
+            </div>
+          </div>
+          <div class="admin-mrp-check">
+            <input type="checkbox" id="menu-mrp" onchange="toggleMenuPriceField()">
+            <label for="menu-mrp">Priced at MRP (no fixed price, e.g. bottled water)</label>
+          </div>
+          <div class="admin-field" style="margin-top:18px;">
+            <label>Note (optional)</label>
+            <input type="text" id="menu-note" placeholder="e.g. Every Friday only">
+          </div>
+          <button type="submit" class="btn-admin" id="menu-submit-btn">➕ Add Menu Item</button>
+          <button type="button" class="btn-cancel" id="menu-cancel-btn" onclick="cancelMenuEdit()">Cancel Edit</button>
+        </form>
+        <div class="admin-list">
+          <div class="admin-list-title">Full Menu (Live)</div>
+          <div id="admin-menu-list">
+            <p style="color:rgba(255,255,255,0.3);font-size:0.85rem;">Loading…</p>
+          </div>
         </div>
       </div>
     </div>
