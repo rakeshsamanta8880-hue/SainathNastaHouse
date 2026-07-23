@@ -464,6 +464,7 @@
       isAdmin = true;
       document.getElementById("login-error").style.display = "none";
       showAdminPanel();
+      setNavAdminButtonState(true);
     } else {
       document.getElementById("login-error").style.display = "block";
     }
@@ -473,7 +474,21 @@
     isAdmin = false;
     document.getElementById("admin-pwd").value = "";
     showLoginPanel();
+    setNavAdminButtonState(false);
+    window.closeAdminOverlay();
   };
+
+  function setNavAdminButtonState(loggedIn) {
+    const navBtn = document.getElementById("nav-admin-btn");
+    if (!navBtn) return;
+    if (loggedIn) {
+      navBtn.textContent = "✏️ Edit Menu";
+      navBtn.classList.add("logged-in");
+    } else {
+      navBtn.textContent = "Login";
+      navBtn.classList.remove("logged-in");
+    }
+  }
 
   window.switchAdminTab = function(tab, btn) {
     document.querySelectorAll(".admin-tab-panel").forEach(p => p.classList.remove("active"));
@@ -1133,6 +1148,7 @@ footer{
   .hero-left{padding:60px 6%;}
   .hero-right{padding:40px 6% 60px;}
   .nav-links{display:none;}
+  .nav-links li:has(.nav-admin-btn.admin-visible){display:list-item;position:fixed;top:14px;right:5%;}
   .special-grid{grid-template-columns:1fr;}
   .contact-grid{grid-template-columns:1fr;}
   .spec-grid{grid-template-columns:repeat(2,1fr);}
@@ -1148,22 +1164,24 @@ footer{
 /* ══════════════════════════════════════════
    ADMIN PANEL
 ══════════════════════════════════════════ */
-#admin-login-btn{
+.nav-admin-btn{
   display:none;
-  background:transparent;
-  border:1px solid rgba(245,184,0,0.25);
-  color:rgba(245,184,0,0.7);
-  font-size:0.68rem;
+  background:rgba(245,184,0,0.1);
+  border:1px solid rgba(245,184,0,0.4);
+  color:var(--gold);
+  font-family:'DM Sans',sans-serif;
+  font-size:0.8rem;
   font-weight:700;
-  letter-spacing:0.1em;
-  text-transform:uppercase;
+  letter-spacing:0.05em;
   cursor:pointer;
-  padding:6px 14px;
-  border-radius:3px;
+  padding:8px 18px;
+  border-radius:4px;
   transition:all 0.2s;
 }
-#admin-login-btn.admin-visible{display:inline-block;}
-#admin-login-btn:hover{color:var(--gold);border-color:var(--gold);background:rgba(245,184,0,0.08);}
+.nav-admin-btn.admin-visible{display:inline-block;}
+.nav-admin-btn:hover{background:rgba(245,184,0,0.22);border-color:var(--gold);}
+.nav-admin-btn.logged-in{background:var(--saffron);border-color:var(--saffron);color:var(--white);}
+.nav-admin-btn.logged-in:hover{background:var(--deep);border-color:var(--deep);}
 
 /* Modal overlay */
 .modal-overlay{
@@ -1448,6 +1466,7 @@ footer{
     <li><a href="#special">Today's Special</a></li>
     <li><a href="#menu">Menu</a></li>
     <li><a href="#contact" class="nav-cta">Contact</a></li>
+    <li><button id="nav-admin-btn" class="nav-admin-btn" onclick="openAdminPanel()">Login</button></li>
   </ul>
 </nav>
 
@@ -1659,7 +1678,6 @@ footer{
     <div class="footer-name">Sainath Nasta House<span>The Real Taste of Bhavnagar</span></div>
   </div>
   <div class="footer-copy">© 2026 Sainath Nasta House · All rights reserved</div>
-  <button id="admin-login-btn" onclick="openAdminPanel()">⚙ Admin</button>
 </footer>
 
 <!-- ══ ADMIN MODAL ══ -->
@@ -1827,12 +1845,11 @@ document.querySelectorAll('.reveal, .spec-item').forEach(el => io.observe(el));
 // e.g. sainath_cinematic.html?admin  or  sainath_cinematic.html#admin
 (function revealAdminIfRequested() {
   const hasAdminInUrl = window.location.href.toLowerCase().includes('admin');
-  const btn = document.getElementById('admin-login-btn');
+  const btn = document.getElementById('nav-admin-btn');
   if (hasAdminInUrl && btn) {
     btn.classList.add('admin-visible');
   }
 })();
 </script>
 </body>
-  
 </html>
