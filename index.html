@@ -8,20 +8,22 @@
 
 <!-- Firebase SDK -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-analytics.js";
+  import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
   // ── PASTE YOUR FIREBASE CONFIG HERE ──────────────────────────────────
   // Go to https://console.firebase.google.com → your project →
-  // Project Settings → Your apps → Web app → firebaseConfig
+  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
   const firebaseConfig = {
-    apiKey:            "YOUR_API_KEY",
-    authDomain:        "YOUR_PROJECT.firebaseapp.com",
-    databaseURL:       "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-    projectId:         "YOUR_PROJECT_ID",
-    storageBucket:     "YOUR_PROJECT.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId:             "YOUR_APP_ID"
+    apiKey: "AIzaSyDgUmnlzR0TjRsc797xvIGPn_BQkHWh5nc",
+    authDomain: "sainathnastahouse-adbf7.firebaseapp.com",
+    projectId: "sainathnastahouse-adbf7",
+    storageBucket: "sainathnastahouse-adbf7.firebasestorage.app",
+    messagingSenderId: "210607794303",
+    appId: "1:210607794303:web:326e3b0bb6abc6386bb74a",
+    measurementId: "G-DTJTZ9C9RP"
   };
   // ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +31,7 @@
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
+  const analytics = getAnalytics(app);
   const specialsRef = ref(db, "todays_specials");
 
   // ── Helpers ──────────────────────────────────────────────────────────
