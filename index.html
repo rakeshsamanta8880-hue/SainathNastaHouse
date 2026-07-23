@@ -1149,16 +1149,21 @@ footer{
    ADMIN PANEL
 ══════════════════════════════════════════ */
 #admin-login-btn{
+  display:none;
   background:transparent;
-  border:none;
-  color:rgba(255,255,255,0.08);
-  font-size:0.6rem;
-  cursor:pointer;
+  border:1px solid rgba(245,184,0,0.25);
+  color:rgba(245,184,0,0.7);
+  font-size:0.68rem;
+  font-weight:700;
   letter-spacing:0.1em;
-  padding:4px 8px;
-  transition:color 0.3s;
+  text-transform:uppercase;
+  cursor:pointer;
+  padding:6px 14px;
+  border-radius:3px;
+  transition:all 0.2s;
 }
-#admin-login-btn:hover{color:rgba(255,255,255,0.35);}
+#admin-login-btn.admin-visible{display:inline-block;}
+#admin-login-btn:hover{color:var(--gold);border-color:var(--gold);background:rgba(245,184,0,0.08);}
 
 /* Modal overlay */
 .modal-overlay{
@@ -1817,6 +1822,17 @@ const io = new IntersectionObserver((entries) => {
   });
 }, { threshold: 0.1 });
 document.querySelectorAll('.reveal, .spec-item').forEach(el => io.observe(el));
+
+// Admin access is hidden unless "admin" appears anywhere in the URL
+// e.g. sainath_cinematic.html?admin  or  sainath_cinematic.html#admin
+(function revealAdminIfRequested() {
+  const hasAdminInUrl = window.location.href.toLowerCase().includes('admin');
+  const btn = document.getElementById('admin-login-btn');
+  if (hasAdminInUrl && btn) {
+    btn.classList.add('admin-visible');
+  }
+})();
 </script>
 </body>
+  
 </html>
