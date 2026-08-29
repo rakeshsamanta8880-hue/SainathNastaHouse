@@ -2079,6 +2079,20 @@ document.querySelectorAll('.reveal, .spec-item').forEach(el => io.observe(el));
     btn.classList.add('admin-visible');
   }
 })();
+
+// ── Casual "view source" speed bumps ─────────────────────────────────
+// NOTE: these only stop accidental right-clicks / keyboard shortcuts.
+// They do NOT hide the page's HTML/JS from anyone who really wants it
+// (view-source:, curl, the Network tab, etc. still show everything).
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  const combo = e.ctrlKey || e.metaKey;
+  const blocked =
+    e.key === 'F12' ||
+    (combo && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase())) ||
+    (combo && e.key.toUpperCase() === 'U');
+  if (blocked) e.preventDefault();
+});
 </script>
 </body>
 </html>
