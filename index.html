@@ -47,6 +47,68 @@
   }
 
   // ══════════════════════════════════════════════════════════════════
+  // ICON PICKER — shared by Today's Special / House Favourites / Full Menu
+  // Lets the admin tap an icon instead of having to type an emoji.
+  // ══════════════════════════════════════════════════════════════════
+  const ICON_CHOICES = [
+    "🍽️","🍛","🍲","🥘","🍜","🍚","🍙","🫓","🥖","🍞","🥞","🥯","🫔","🫙",
+    "🥟","🥙","🌮","🧆","🥪","🍟","🥨","🥔","🥕","🌶️","🧄","🧅","🍅","🥦",
+    "🍆","🌿","🥣","🧈","🧀","🥛","💧","🍮","🍯","🍩","🧁","🍰","🍫","🍪",
+    "☕","🍵","🥤","🧃","🍋","🍇","🍓","🔥","⭐","💛","🌟"
+  ];
+
+  function initIconPicker(pickerId, inputId, defaultIcon) {
+    const picker = document.getElementById(pickerId);
+    const input  = document.getElementById(inputId);
+    if (!picker || !input) return;
+
+    picker.innerHTML = `
+      <div class="icon-picker-current">
+        <span class="icon-picker-current-emoji" id="${pickerId}-preview">${esc(input.value || defaultIcon)}</span>
+        <span class="icon-picker-current-label">Tap an icon below to choose it</span>
+      </div>
+      <div class="icon-picker-grid" id="${pickerId}-grid"></div>
+      <div class="icon-picker-custom">
+        <label for="${pickerId}-custom">Custom</label>
+        <input type="text" id="${pickerId}-custom" maxlength="4" placeholder="${esc(defaultIcon)}">
+      </div>
+    `;
+
+    const grid = document.getElementById(`${pickerId}-grid`);
+    ICON_CHOICES.forEach(icon => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "icon-option" + (input.value === icon ? " selected" : "");
+      btn.textContent = icon;
+      btn.addEventListener("click", () => {
+        input.value = icon;
+        syncIconPicker(pickerId, inputId, defaultIcon);
+      });
+      grid.appendChild(btn);
+    });
+
+    const customInput = document.getElementById(`${pickerId}-custom`);
+    customInput.value = (input.value && !ICON_CHOICES.includes(input.value)) ? input.value : "";
+    customInput.addEventListener("input", () => {
+      input.value = customInput.value.trim();
+      syncIconPicker(pickerId, inputId, defaultIcon, true);
+    });
+  }
+
+  function syncIconPicker(pickerId, inputId, defaultIcon, skipCustomSync) {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(`${pickerId}-preview`);
+    if (preview) preview.textContent = input.value || defaultIcon;
+    document.querySelectorAll(`#${pickerId}-grid .icon-option`).forEach(btn => {
+      btn.classList.toggle("selected", btn.textContent === input.value);
+    });
+    if (!skipCustomSync) {
+      const customInput = document.getElementById(`${pickerId}-custom`);
+      if (customInput) customInput.value = (input.value && !ICON_CHOICES.includes(input.value)) ? input.value : "";
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
   // TODAY'S SPECIAL
   // ══════════════════════════════════════════════════════════════════
   function renderSpecials(items) {
@@ -111,6 +173,7 @@
         document.getElementById("f-desc").value  = item.description || "";
         document.getElementById("f-price").value = item.price || "";
         document.getElementById("f-emoji").value = item.emoji || "";
+        syncIconPicker("f-emoji-picker", "f-emoji", "🍽️");
         document.getElementById("special-submit-btn").textContent = "💾 Save Changes";
         document.getElementById("special-cancel-btn").style.display = "inline-block";
       });
@@ -146,6 +209,7 @@
     document.getElementById("f-desc").value  = "";
     document.getElementById("f-price").value = "";
     document.getElementById("f-emoji").value = "";
+    syncIconPicker("f-emoji-picker", "f-emoji", "🍽️");
     document.getElementById("special-submit-btn").textContent = "➕ Add to Today's Special";
     document.getElementById("special-cancel-btn").style.display = "none";
   };
@@ -228,6 +292,7 @@
         document.getElementById("fav-subtitle").value = item.subtitle || "";
         document.getElementById("fav-price").value = item.price || "";
         document.getElementById("fav-emoji").value = item.emoji || "";
+        syncIconPicker("fav-emoji-picker", "fav-emoji", "🍽️");
         document.getElementById("fav-submit-btn").textContent = "💾 Save Changes";
         document.getElementById("fav-cancel-btn").style.display = "inline-block";
       });
@@ -275,6 +340,7 @@
     document.getElementById("fav-subtitle").value = "";
     document.getElementById("fav-price").value = "";
     document.getElementById("fav-emoji").value = "";
+    syncIconPicker("fav-emoji-picker", "fav-emoji", "🍽️");
     document.getElementById("fav-submit-btn").textContent = "➕ Add House Favourite";
     document.getElementById("fav-cancel-btn").style.display = "none";
   };
@@ -283,31 +349,31 @@
   // FULL MENU (Roti / Sabji / Rice / Extras)
   // ══════════════════════════════════════════════════════════════════
   const DEFAULT_MENU = [
-    { name:"Plain Roti", price:"10", category:"roti" },
-    { name:"Butter Roti", price:"15", category:"roti" },
-    { name:"Masala Roti", price:"20", category:"roti" },
-    { name:"Sada Parotha", price:"30", category:"roti" },
-    { name:"Aaloo Parotha", price:"50", category:"roti" },
-    { name:"Puri (5 Pcs.)", price:"40", category:"roti" },
-    { name:"Thepla", price:"15", category:"roti" },
-    { name:"Aaloo Sabji", price:"40", category:"sabji" },
-    { name:"Sukhi Bhaji (Aaloo)", price:"40", category:"sabji" },
-    { name:"Chole Sabji", price:"50", category:"sabji" },
-    { name:"Chana Dal", price:"50", category:"sabji" },
-    { name:"Dal Tadka", price:"50", category:"sabji" },
-    { name:"Paneer Sabji", price:"70", category:"sabji", note:"Every Friday only" },
-    { name:"Sev Tameta", price:"50", category:"sabji" },
-    { name:"Sev Gathiya", price:"50", category:"sabji" },
-    { name:"Plain Rice", price:"30", category:"rice" },
-    { name:"Dal Rice", price:"70", category:"rice" },
-    { name:"Veg Pulav", price:"70", category:"rice" },
-    { name:"Chole – Rice", price:"80", category:"rice" },
-    { name:"Chole – Veg Pulav", price:"100", category:"rice" },
-    { name:"Dahi", price:"", category:"extra", isMrp:true },
-    { name:"Butter Milk", price:"10", category:"extra" },
-    { name:"Roasted Papad", price:"10", category:"extra" },
-    { name:"Fried Papad", price:"15", category:"extra" },
-    { name:"Mineral Water", price:"", category:"extra", isMrp:true }
+    { name:"Plain Roti", price:"10", category:"roti", emoji:"🫓" },
+    { name:"Butter Roti", price:"15", category:"roti", emoji:"🧈" },
+    { name:"Masala Roti", price:"20", category:"roti", emoji:"🌶️" },
+    { name:"Sada Parotha", price:"30", category:"roti", emoji:"🫓" },
+    { name:"Aaloo Parotha", price:"50", category:"roti", emoji:"🥔" },
+    { name:"Puri (5 Pcs.)", price:"40", category:"roti", emoji:"🫓" },
+    { name:"Thepla", price:"15", category:"roti", emoji:"🫓" },
+    { name:"Aaloo Sabji", price:"40", category:"sabji", emoji:"🥔" },
+    { name:"Sukhi Bhaji (Aaloo)", price:"40", category:"sabji", emoji:"🥔" },
+    { name:"Chole Sabji", price:"50", category:"sabji", emoji:"🍛" },
+    { name:"Chana Dal", price:"50", category:"sabji", emoji:"🥣" },
+    { name:"Dal Tadka", price:"50", category:"sabji", emoji:"🥣" },
+    { name:"Paneer Sabji", price:"70", category:"sabji", note:"Every Friday only", emoji:"🧀" },
+    { name:"Sev Tameta", price:"50", category:"sabji", emoji:"🍅" },
+    { name:"Sev Gathiya", price:"50", category:"sabji", emoji:"🌿" },
+    { name:"Plain Rice", price:"30", category:"rice", emoji:"🍚" },
+    { name:"Dal Rice", price:"70", category:"rice", emoji:"🍚" },
+    { name:"Veg Pulav", price:"70", category:"rice", emoji:"🍛" },
+    { name:"Chole – Rice", price:"80", category:"rice", emoji:"🍚" },
+    { name:"Chole – Veg Pulav", price:"100", category:"rice", emoji:"🍛" },
+    { name:"Dahi", price:"", category:"extra", isMrp:true, emoji:"🥛" },
+    { name:"Butter Milk", price:"10", category:"extra", emoji:"🥛" },
+    { name:"Roasted Papad", price:"10", category:"extra", emoji:"🥨" },
+    { name:"Fried Papad", price:"15", category:"extra", emoji:"🍟" },
+    { name:"Mineral Water", price:"", category:"extra", isMrp:true, emoji:"💧" }
   ];
 
   const CATEGORY_LABELS = { roti:"Roti & Bread", sabji:"Sabji", rice:"Rice", extra:"Extras" };
@@ -319,7 +385,10 @@
       ? `<span class="mrp-tag">MRP</span>`
       : `<span class="menu-row-price">₹${esc(item.price)}</span>`;
     return `
-      <span class="menu-row-name">${esc(item.name)}${item.note ? `<span class="menu-row-note">${esc(item.note)}</span>` : ""}</span>
+      <div class="menu-row-main">
+        <span class="menu-row-emoji">${esc(item.emoji || "🍽️")}</span>
+        <span class="menu-row-name">${esc(item.name)}${item.note ? `<span class="menu-row-note">${esc(item.note)}</span>` : ""}</span>
+      </div>
       ${priceHtml}
     `;
   }
@@ -353,9 +422,9 @@
       const row = document.createElement("div");
       row.className = "admin-item-row";
       row.innerHTML = `
-        <span class="admin-item-emoji" style="font-size:0.68rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--saffron);width:56px;">${esc(CATEGORY_LABELS[item.category] || item.category)}</span>
+        <span class="admin-item-emoji">${esc(item.emoji || "🍽️")}</span>
         <div class="admin-item-info">
-          <div class="admin-item-name">${esc(item.name)}</div>
+          <div class="admin-item-name">${esc(item.name)}<span class="menu-cat-tag">${esc(CATEGORY_LABELS[item.category] || item.category)}</span></div>
           <div class="admin-item-sub">${esc(item.note || "")}</div>
         </div>
         <div class="admin-item-price">${item.isMrp ? "MRP" : "₹" + esc(item.price)}</div>
@@ -376,6 +445,8 @@
         document.getElementById("menu-category").value = item.category || "roti";
         document.getElementById("menu-price").value = item.price || "";
         document.getElementById("menu-note").value = item.note || "";
+        document.getElementById("menu-emoji").value = item.emoji || "";
+        syncIconPicker("menu-emoji-picker", "menu-emoji", "🍽️");
         document.getElementById("menu-mrp").checked = !!item.isMrp;
         toggleMenuPriceField();
         document.getElementById("menu-submit-btn").textContent = "💾 Save Changes";
@@ -415,8 +486,9 @@
     const isMrp = document.getElementById("menu-mrp").checked;
     const price = isMrp ? "" : document.getElementById("menu-price").value.trim();
     const note = document.getElementById("menu-note").value.trim();
+    const emoji = document.getElementById("menu-emoji").value.trim() || "🍽️";
     if (!name || (!isMrp && !price)) return;
-    const payload = { name, category, price, isMrp, note };
+    const payload = { name, category, price, isMrp, note, emoji };
     if (editingMenuKey) {
       update(ref(db, `menu_items/${editingMenuKey}`), payload);
     } else {
@@ -429,6 +501,8 @@
     document.getElementById("menu-name").value = "";
     document.getElementById("menu-price").value = "";
     document.getElementById("menu-note").value = "";
+    document.getElementById("menu-emoji").value = "";
+    syncIconPicker("menu-emoji-picker", "menu-emoji", "🍽️");
     document.getElementById("menu-mrp").checked = false;
     toggleMenuPriceField();
     document.getElementById("menu-submit-btn").textContent = "➕ Add Menu Item";
@@ -496,6 +570,11 @@
     document.getElementById("admin-tab-" + tab).classList.add("active");
     btn.classList.add("active");
   };
+
+  // Build the tap-to-pick icon grids for all three admin forms
+  initIconPicker("f-emoji-picker", "f-emoji", "🍽️");
+  initIconPicker("fav-emoji-picker", "fav-emoji", "🍽️");
+  initIconPicker("menu-emoji-picker", "menu-emoji", "🍽️");
 </script>
 <style>
 /* ══════════════════════════════════════════
@@ -1438,6 +1517,83 @@ footer{
 .admin-mrp-check input{width:auto;}
 .admin-mrp-check label{margin:0;text-transform:none;font-size:0.82rem;letter-spacing:0;color:rgba(255,255,255,0.65);}
 
+/* Icon picker (used for Today's Special / House Favourites / Full Menu forms) */
+.icon-picker{margin-top:8px;}
+.icon-picker-current{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:10px;
+}
+.icon-picker-current-emoji{
+  font-size:1.5rem;
+  width:44px;height:44px;
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:6px;
+}
+.icon-picker-current-label{
+  font-size:0.75rem;
+  color:rgba(255,255,255,0.4);
+  line-height:1.4;
+}
+.icon-picker-grid{
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  gap:6px;
+  max-height:150px;
+  overflow-y:auto;
+  padding:10px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:6px;
+}
+.icon-option{
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:4px;
+  font-size:1.25rem;
+  line-height:1;
+  padding:6px 0;
+  cursor:pointer;
+  transition:all 0.15s;
+}
+.icon-option:hover{background:rgba(245,184,0,0.12);border-color:rgba(245,184,0,0.3);}
+.icon-option.selected{background:rgba(245,184,0,0.2);border-color:var(--gold);}
+.icon-picker-custom{
+  margin-top:8px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.icon-picker-custom label{
+  font-size:0.72rem;
+  color:rgba(255,255,255,0.35);
+  white-space:nowrap;
+  margin:0;
+  text-transform:none;
+  letter-spacing:0;
+}
+.icon-picker-custom input{flex:1;}
+
+.menu-cat-tag{
+  display:inline-block;
+  font-size:0.6rem;
+  font-weight:700;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--saffron);
+  background:rgba(232,118,10,0.12);
+  padding:2px 6px;
+  border-radius:3px;
+  margin-left:8px;
+  vertical-align:middle;
+}
+.menu-row-main{display:flex;align-items:center;gap:12px;}
+.menu-row-emoji{font-size:1.3rem;flex-shrink:0;}
+
 /* Special empty state */
 .special-empty{
   grid-column:1/-1;
@@ -1783,15 +1939,14 @@ footer{
             <label>Description</label>
             <input type="text" id="f-desc" placeholder="e.g. Garlic-spiced potato curry">
           </div>
-          <div class="admin-row">
-            <div class="admin-field">
-              <label>Price (₹) *</label>
-              <input type="number" id="f-price" placeholder="50" min="1" required>
-            </div>
-            <div class="admin-field">
-              <label>Emoji</label>
-              <input type="text" id="f-emoji" placeholder="🍽️" maxlength="4">
-            </div>
+          <div class="admin-field">
+            <label>Price (₹) *</label>
+            <input type="number" id="f-price" placeholder="50" min="1" required>
+          </div>
+          <div class="admin-field">
+            <label>Icon</label>
+            <input type="hidden" id="f-emoji">
+            <div class="icon-picker" id="f-emoji-picker"></div>
           </div>
           <button type="submit" class="btn-admin" id="special-submit-btn">➕ Add to Today's Special</button>
           <button type="button" class="btn-cancel" id="special-cancel-btn" onclick="cancelSpecialEdit()">Cancel Edit</button>
@@ -1816,15 +1971,14 @@ footer{
             <label>Subtitle</label>
             <input type="text" id="fav-subtitle" placeholder="e.g. 5 Puri">
           </div>
-          <div class="admin-row">
-            <div class="admin-field">
-              <label>Price (₹) *</label>
-              <input type="number" id="fav-price" placeholder="100" min="1" required>
-            </div>
-            <div class="admin-field">
-              <label>Emoji</label>
-              <input type="text" id="fav-emoji" placeholder="🍽️" maxlength="4">
-            </div>
+          <div class="admin-field">
+            <label>Price (₹) *</label>
+            <input type="number" id="fav-price" placeholder="100" min="1" required>
+          </div>
+          <div class="admin-field">
+            <label>Icon</label>
+            <input type="hidden" id="fav-emoji">
+            <div class="icon-picker" id="fav-emoji-picker"></div>
           </div>
           <button type="submit" class="btn-admin" id="fav-submit-btn">➕ Add House Favourite</button>
           <button type="button" class="btn-cancel" id="fav-cancel-btn" onclick="cancelFavEdit()">Cancel Edit</button>
@@ -1865,6 +2019,11 @@ footer{
             <label for="menu-mrp">Priced at MRP (no fixed price, e.g. bottled water)</label>
           </div>
           <div class="admin-field" style="margin-top:18px;">
+            <label>Icon</label>
+            <input type="hidden" id="menu-emoji">
+            <div class="icon-picker" id="menu-emoji-picker"></div>
+          </div>
+          <div class="admin-field">
             <label>Note (optional)</label>
             <input type="text" id="menu-note" placeholder="e.g. Every Friday only">
           </div>
